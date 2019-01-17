@@ -67,19 +67,19 @@ def batch_all(labels, embeddings, margin, metric=euclidean_distance):
     return loss
 
 
-def batch_hard(labels, embeddings, margin, metric=euclidean_distance):
-    dist = metric(embeddings)
+def triplet_loss_batch_hard(margin=0.2, metric=euclidean_distance):
+    def batch_hard(labels, embeddings):
+        dist = metric(embeddings)
 
-    ap_mask = tf.to_float(valid_anchor_positive_mask(labels))
-    ap_dist = tf.multiply(dist, ap_mask)
-    hardest_positive_dist = tf.reduce_max(ap_dist, axis=1, keepdims=True)
+        ap_mask = tf.to_float(valid_anchor_positive_mask(labels))
+        ap_dist = tf.multiply(dist, ap_mask)
+        hardest_positive_dist = tf.reduce_max(ap_dist, axis=1, keepdims=True)
 
-    an_mask = tf.to_float(valid_anchor_negative_mask(labels))
-    an_dist = dist + tf.reduce_max(dist, axis=1, keepdims=True) * (1.0-an_mask)
-    hardest_negative_dist = tf.reduce_min(an_dist, axis=1, keepdims=True)
+        an_mask = tf.to_float(valid_anchor_negative_mask(labels))
+        an_dist = dist + tf.reduce_max(dist, axis=1, keepdims=True) * (1.0-an_mask)
+        hardest_negative_dist = tf.reduce_min(an_dist, axis=1, keepdims=True)
 
-    loss = tf.reduce_mean(tf.maximum(hardest_positive_dist - hardest_negative_dist + margin, 0.0))
-    return loss
-
-
+        loss = tf.reduce_mean(tf.maximum(hardest_positive_dist - hardest_negative_dist + margin, 0.0))
+        return loss
+    return batch_hard
 

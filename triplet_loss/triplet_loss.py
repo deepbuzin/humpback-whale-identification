@@ -45,8 +45,8 @@ def valid_anchor_positive_mask(labels):
 
 
 def valid_anchor_negative_mask(labels):
-    indices_equal = tf.cast(tf.eye(tf.shape(labels)[0]), tf.bool)
-    mask = tf.logical_not(indices_equal)
+    labels_equal = tf.equal(tf.expand_dims(labels, 0), tf.expand_dims(labels, 1))
+    mask = tf.logical_not(labels_equal)
     return mask
 
 

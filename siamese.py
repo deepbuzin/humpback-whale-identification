@@ -36,7 +36,7 @@ def build():
     x = AveragePooling2D((8, 6))(x)
     x = Flatten()(x)
     x = Dense(512, activation='relu', kernel_initializer=glorot_uniform())(x)
-    x = Dense(192, activation='relu', kernel_initializer=glorot_uniform(), kernel_regularizer='l2')(x)
+    x = Dense(192, kernel_initializer=glorot_uniform(), kernel_regularizer='l2')(x)
 
     model = Model(inputs=img, outputs=x, name='ResNet_siamese')
     model.summary()

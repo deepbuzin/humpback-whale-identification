@@ -12,7 +12,7 @@ from triplet_loss.triplet_loss import triplet_loss_batch_hard
 
 
 def build():
-    img = Input(shape=(512, 384, 3))
+    img = Input(shape=(1024, 768, 3))
 
     x = Conv2D(64, (7, 7), strides=(2, 2), padding='valid', name='conv1', kernel_initializer=glorot_uniform())(img)
     x = BatchNormalization(axis=3, name='bn1')(x)
@@ -31,10 +31,12 @@ def build():
     x = conv(x, filters=[256, 256, 1024], kernel_size=(3, 3), stage=4, block=1)
     x = conv(x, filters=[256, 256, 1024], kernel_size=(3, 3), stage=5, block=1)
     x = conv(x, filters=[256, 256, 1024], kernel_size=(3, 3), stage=6, block=1)
+    x = conv(x, filters=[256, 256, 1024], kernel_size=(3, 3), stage=7, block=1)
 
     x = AveragePooling2D((8, 6))(x)
     x = Flatten()(x)
-    x = Dense(192, kernel_initializer=glorot_uniform())(x)
+    x = Dense(512, activation='relu', kernel_initializer=glorot_uniform())(x)
+    x = Dense(192, activation='relu', kernel_initializer=glorot_uniform(), kernel_regularizer='l2')(x)
 
     model = Model(inputs=img, outputs=x, name='ResNet_siamese')
     model.summary()

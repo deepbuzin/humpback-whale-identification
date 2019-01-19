@@ -10,7 +10,7 @@ from os.path import join
 img_dir = 'D:/IdeaProjects/whales/data/train'
 
 
-def fetch(name):
+def fetch(img_dir, name):
     img = cv2.imread(join(img_dir, name))
     if img.shape == 2:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
@@ -38,7 +38,7 @@ def pad(img, size=(1024, 768)):
 
 
 if __name__ == '__main__':
-    whale = fetch('1c3a2c68c.jpg')
+    whale = fetch(img_dir, '1c3a2c68c.jpg')
     h, w = whale.shape[0], whale.shape[1]
     whale = resize(whale, (1024, int(1024 * h / w)))
     print(whale.shape)

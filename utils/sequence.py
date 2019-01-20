@@ -4,13 +4,12 @@ from __future__ import print_function
 
 import numpy as np
 from keras.utils import Sequence
-from os.path import join
 
 from .preprocessing import fetch, resize, pad
 
 
 class WhalesSequence(Sequence):
-    def __init__(self, img_dir, x_set, y_set, input_shape, batch_size):
+    def __init__(self, img_dir, input_shape, x_set, y_set=None, batch_size=16):
         self.x, self.y = x_set, y_set
         self.img_dir = img_dir
         self.input_shape = input_shape
@@ -21,6 +20,9 @@ class WhalesSequence(Sequence):
 
     def __getitem__(self, idx):
         batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
+        if self.y is None:
+            return np.array([self.preprocess(fetch(self.img_dir, name)) for name in batch_x])
+
         batch_y = self.y[idx * self.batch_size:(idx + 1) * self.batch_size]
         return np.array([self.preprocess(fetch(self.img_dir, name)) for name in batch_x]), np.array(batch_y)
 

@@ -3,8 +3,9 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+import os
 
-from keras.models import Model
+from keras.models import Model, load_model
 from keras.layers import Activation, AveragePooling2D, BatchNormalization, Conv2D, Dense, Flatten, Input, MaxPool2D
 from keras.initializers import glorot_uniform
 from keras.optimizers import Adam
@@ -79,13 +80,26 @@ def build():
 
 def fit(model, img_dir, csv):
     data = np.genfromtxt(csv, dtype=str, delimiter=',', skip_header=True)
-    gen = WhalesSequence(img_dir, x_set=data[:, 0], y_set=data[:, 1], input_shape=(384, 512, 3), batch_size=10)
-    model.fit_generator(gen)
+    train = WhalesSequence(img_dir, input_shape=(384, 512, 3), x_set=data[:, 0], y_set=data[:, 1], batch_size=10)
+    model.fit_generator(train, epochs=2)
+    model.save('model.h5')
+
+
+def predict(model, img_dir):
+    data = np.array(os.listdir(img_dir))
+    train = WhalesSequence(img_dir, input_shape=(384, 512, 3), x_set=data, batch_size=10)
+    emb = model.predict_generator(train, verbose=1)
+    print(emb)
+    np.save('np_embeddings.pkl', emb)
 
 
 if __name__ == '__main__':
-    m = build_modest()
-    m.compile(optimizer=Adam(0.001), loss=triplet_loss_batch_hard(margin=0.2))
-    fit(m, 'D:/IdeaProjects/whales/data/train', 'D:/IdeaProjects/whales/data/train_fixed.csv')
+    # m = build_modest()
+    # m.compile(optimizer=Adam(0.001), loss=triplet_loss_batch_hard(margin=0.2))
+    # fit(m, 'D:/IdeaProjects/whales/data/train', 'D:/IdeaProjects/whales/data/train_fixed.csv')
+
+    m_trained = load_model('model.h5', custom_objects={'batch_hard': triplet_loss_batch_hard(margin=0.2)})
+    predict(m_trained, 'D:/IdeaProjects/whales/data/train')
+
 
 

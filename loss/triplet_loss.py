@@ -50,24 +50,23 @@ def valid_anchor_negative_mask(labels):
     return mask
 
 
-def batch_all(labels, embeddings, margin, metric=euclidean_distance):
-    dist = metric(embeddings)
+def triplet_loss(margin=0.2, metric=euclidean_distance, strategy='batch_all'):
+    def batch_all(labels, embeddings):
+        dist = metric(embeddings)
 
-    anchor_positive_dist = tf.expand_dims(dist, 2)
-    anchor_negative_dist = tf.expand_dims(dist, 1)
+        anchor_positive_dist = tf.expand_dims(dist, 2)
+        anchor_negative_dist = tf.expand_dims(dist, 1)
 
-    loss = anchor_positive_dist - anchor_negative_dist + margin
+        loss = anchor_positive_dist - anchor_negative_dist + margin
 
-    mask = tf.to_float(valid_triplets_mask(labels))
-    loss = tf.multiply(loss, mask)
-    loss = tf.maximum(loss, 0.0)
+        mask = tf.to_float(valid_triplets_mask(labels))
+        loss = tf.multiply(loss, mask)
+        loss = tf.maximum(loss, 0.0)
 
-    num_non_easy_triplets = tf.reduce_sum(tf.to_float(tf.greater(loss, 1e-16)))
-    loss = tf.reduce_sum(loss) / (num_non_easy_triplets + 1e-16)
-    return loss
+        num_non_easy_triplets = tf.reduce_sum(tf.to_float(tf.greater(loss, 1e-16)))
+        loss = tf.reduce_sum(loss) / (num_non_easy_triplets + 1e-16)
+        return loss
 
-
-def triplet_loss_batch_hard(margin=0.2, metric=euclidean_distance):
     def batch_hard(labels, embeddings):
         dist = metric(embeddings)
 
@@ -81,5 +80,11 @@ def triplet_loss_batch_hard(margin=0.2, metric=euclidean_distance):
 
         loss = tf.reduce_mean(tf.maximum(hardest_positive_dist - hardest_negative_dist + margin, 0.0))
         return loss
-    return batch_hard
+
+    if strategy == 'batch_all':
+        return batch_all
+    elif strategy == 'batch_hard':
+        return batch_hard
+    else:
+        raise ValueError('unknown strategy: %s' % strategy)
 

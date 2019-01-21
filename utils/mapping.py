@@ -9,6 +9,7 @@ def extract_id_mapping(data):
         mapping[w] = i
     return mapping
 
+
 if __name__ == '__main__':
     data = pd.read_csv('D:/IdeaProjects/whales/data/train.csv')
     mapping = extract_id_mapping(data)

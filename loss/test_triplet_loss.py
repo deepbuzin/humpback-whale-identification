@@ -1,12 +1,12 @@
 import numpy as np
 import tensorflow as tf
 
-from triplet_loss import euclidean_distance
-from triplet_loss import batch_all
-from triplet_loss import batch_hard
-from triplet_loss import valid_triplets_mask
-from triplet_loss import valid_anchor_positive_mask
-from triplet_loss import valid_anchor_negative_mask
+from loss import euclidean_distance
+from loss import batch_all
+from loss import batch_hard
+from loss import valid_triplets_mask
+from loss import valid_anchor_positive_mask
+from loss import valid_anchor_negative_mask
 
 
 def euclidean_distance_np(feature):

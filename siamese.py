@@ -5,87 +5,71 @@ from __future__ import print_function
 import numpy as np
 import os
 
-from keras.models import Model, load_model
-from keras.layers import Activation, AveragePooling2D, BatchNormalization, Conv2D, Dense, Flatten, Input, MaxPool2D
-from keras.initializers import glorot_uniform
 from keras.optimizers import Adam
+from keras.callbacks import ModelCheckpoint
 
-from resnet.resnet import identity, conv
-from triplet_loss.triplet_loss import triplet_loss_batch_hard
+from model.resnet import resnet_like_33, resnet_like_36
+from loss.triplet_loss import triplet_loss
 from utils.sequence import WhalesSequence
 
 
-def build_modest():
-    img = Input(shape=(384, 512, 3))
+class Siamese(object):
+    def __init__(self, model, input_shape=(384, 512, 3), embedding_size=128):
+        self.input_shape = input_shape
+        self.embedding_size = embedding_size
+        self.embeddings = None
+        self.model = Siamese.build_model(model, input_shape, embedding_size)
 
-    x = Conv2D(64, (7, 7), strides=(2, 2), padding='valid', name='conv1', kernel_initializer=glorot_uniform())(img)
-    x = BatchNormalization(axis=3, name='bn1')(x)
-    x = Activation('relu')(x)
-    x = MaxPool2D((3, 3), strides=(2, 2), padding='same')(x)
+    @staticmethod
+    def build_model(model_name, input_shape, embedding_size):
+        if model_name == 'resnet_like_33':
+            return resnet_like_33(input_shape=input_shape, embedding_size=embedding_size)
+        elif model_name == 'resnet_like_36':
+            return resnet_like_36(input_shape=input_shape, embedding_size=embedding_size)
+        else:
+            raise ValueError('no such model: %s' % model_name)
 
-    x = conv(x, filters=[64, 64, 256], kernel_size=(3, 3), strides=(1, 1), stage=2, block=1)
-    x = identity(x, filters=[64, 64, 256], kernel_size=(3, 3), stage=2, block=2)
-    x = identity(x, filters=[64, 64, 256], kernel_size=(3, 3), stage=2, block=3)
+    def train(self, csv, img_dir, epochs=10, batch_size=10, learning_rate=0.001, margin=0.5, strategy='batch_all'):
+        self.model.summary()
+        self.model.compile(optimizer=Adam(learning_rate), loss=triplet_loss(margin, strategy))
 
-    x = conv(x, filters=[128, 128, 512], kernel_size=(3, 3), stage=3, block=1)
-    x = identity(x, filters=[128, 128, 512], kernel_size=(3, 3), stage=3, block=2)
-    x = identity(x, filters=[128, 128, 512], kernel_size=(3, 3), stage=3, block=3)
-    x = identity(x, filters=[128, 128, 512], kernel_size=(3, 3), stage=3, block=4)
+        whales_data = np.genfromtxt(csv, dtype=str, delimiter=',', skip_header=True)
+        # TODO check if labels are replaced with numbers
+        # TODO alternatively can just work with raw whales dataset
+        whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data[:, 0], y_set=whales_data[:, 1], batch_size=batch_size)
+        self.model.fit_generator(whales, epochs=epochs, callbacks=[ModelCheckpoint(filepath='checkpoint-{epoch:02d}')])
+        self.model.save('autosave_model.h5')
 
-    x = conv(x, filters=[256, 256, 1024], kernel_size=(3, 3), stage=4, block=1)
-    x = conv(x, filters=[256, 256, 1024], kernel_size=(3, 3), stage=5, block=1)
-    x = conv(x, filters=[256, 256, 1024], kernel_size=(3, 3), stage=6, block=1)
+    def make_embeddings(self, img_dir, batch_size=10):
+        whales_data = np.array(os.listdir(img_dir))
+        whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data, batch_size=batch_size)
+        self.embeddings = self.model.predict_generator(whales, verbose=1)
+        # TODO make postprocessing
 
-    x = AveragePooling2D((6, 8))(x)
-    x = Flatten()(x)
-    x = Dense(512, activation='relu', kernel_initializer=glorot_uniform())(x)
-    x = Dense(192, kernel_initializer=glorot_uniform(), kernel_regularizer='l2')(x)
+    def save_embeddings(self, filename):
+        np.save(filename, self.embeddings)
 
-    model = Model(inputs=img, outputs=x, name='ResNet_siamese')
-    model.summary()
-    return model
+    def load_embeddings(self, filename):
+        pass
 
+    def predict(self):
+        pass
 
-def build():
-    img = Input(shape=(768, 1024, 3))
+    def save(self):
+        pass
 
-    x = Conv2D(64, (7, 7), strides=(2, 2), padding='valid', name='conv1', kernel_initializer=glorot_uniform())(img)
-    x = BatchNormalization(axis=3, name='bn1')(x)
-    x = Activation('relu')(x)
-    x = MaxPool2D((3, 3), strides=(2, 2), padding='same')(x)
-
-    x = conv(x, filters=[64, 64, 256], kernel_size=(3, 3), strides=(1, 1), stage=2, block=1)
-    x = identity(x, filters=[64, 64, 256], kernel_size=(3, 3), stage=2, block=2)
-    x = identity(x, filters=[64, 64, 256], kernel_size=(3, 3), stage=2, block=3)
-
-    x = conv(x, filters=[128, 128, 512], kernel_size=(3, 3), stage=3, block=1)
-    x = identity(x, filters=[128, 128, 512], kernel_size=(3, 3), stage=3, block=2)
-    x = identity(x, filters=[128, 128, 512], kernel_size=(3, 3), stage=3, block=3)
-    x = identity(x, filters=[128, 128, 512], kernel_size=(3, 3), stage=3, block=4)
-
-    x = conv(x, filters=[256, 256, 1024], kernel_size=(3, 3), stage=4, block=1)
-    x = conv(x, filters=[256, 256, 1024], kernel_size=(3, 3), stage=5, block=1)
-    x = conv(x, filters=[256, 256, 1024], kernel_size=(3, 3), stage=6, block=1)
-    x = conv(x, filters=[256, 256, 1024], kernel_size=(3, 3), stage=7, block=1)
-
-    x = AveragePooling2D((6, 8))(x)
-    x = Flatten()(x)
-    x = Dense(512, activation='relu', kernel_initializer=glorot_uniform())(x)
-    x = Dense(192, kernel_initializer=glorot_uniform(), kernel_regularizer='l2')(x)
-
-    model = Model(inputs=img, outputs=x, name='ResNet_siamese')
-    model.summary()
-    return model
+    def load(self):
+        pass
 
 
 def fit(model, img_dir, csv):
     data = np.genfromtxt(csv, dtype=str, delimiter=',', skip_header=True)
     train = WhalesSequence(img_dir, input_shape=(384, 512, 3), x_set=data[:, 0], y_set=data[:, 1], batch_size=10)
-    model.fit_generator(train, epochs=2)
-    model.save('model.h5')
+    model.fit_generator(train, epochs=10, callbacks=[ModelCheckpoint(filepath='checkpoint-{epoch:02d}')])
+    model.save('model_777.h5')
 
 
-def predict(model, img_dir):
+def make_embeddings(model, img_dir):
     data = np.array(os.listdir(img_dir))
     train = WhalesSequence(img_dir, input_shape=(384, 512, 3), x_set=data, batch_size=10)
     emb = model.predict_generator(train, verbose=1)
@@ -93,13 +77,19 @@ def predict(model, img_dir):
     np.save('np_embeddings.pkl', emb)
 
 
-if __name__ == '__main__':
-    # m = build_modest()
-    # m.compile(optimizer=Adam(0.001), loss=triplet_loss_batch_hard(margin=0.2))
-    # fit(m, 'D:/IdeaProjects/whales/data/train', 'D:/IdeaProjects/whales/data/train_fixed.csv')
+def predict(model, img_dir):
+    data = np.array(os.listdir(img_dir))
+    test = WhalesSequence(img_dir, input_shape=(384, 512, 3), x_set=data, batch_size=10)
+    emb = model.predict_generator(test, verbose=1)
 
-    m_trained = load_model('model.h5', custom_objects={'batch_hard': triplet_loss_batch_hard(margin=0.2)})
-    predict(m_trained, 'D:/IdeaProjects/whales/data/train')
+
+if __name__ == '__main__':
+    m = resnet_like_33(input_shape=(384, 512, 3), embedding_size=128)
+    m.compile(optimizer=Adam(0.0001), loss=triplet_loss(margin=0.5, strategy='batch_all'))
+    fit(m, 'D:/IdeaProjects/whales/data/train', 'D:/IdeaProjects/whales/data/train_fixed.csv')
+
+    # m_trained = load_model('model.h5', custom_objects={'batch_hard': triplet_loss_batch_hard(margin=0.2)})
+    # make_embeddings(m_trained, 'D:/IdeaProjects/whales/data/train')
 
 
 

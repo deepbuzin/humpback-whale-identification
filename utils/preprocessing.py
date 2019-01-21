@@ -37,16 +37,6 @@ def pad(img, size=(1024, 768)):
     return padded
 
 
-if __name__ == '__main__':
-    whale = fetch(img_dir, '1c3a2c68c.jpg')
-    h, w = whale.shape[0], whale.shape[1]
-    whale = resize(whale, (1024, int(1024 * h / w)))
-    print(whale.shape)
-    whale = pad(whale, (1024, 768))
-    print(whale.shape)
-    cv2.imshow('whale', whale)
-    cv2.waitKey(5000)
-
 
 
 

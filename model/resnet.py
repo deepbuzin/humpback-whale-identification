@@ -8,6 +8,17 @@ from keras.models import Model
 
 
 def identity(x, filters, kernel_size, stage, block, regularizer=None, trainable=True):
+    """Create an identity residual block
+
+    :param x:
+    :param filters: tuple of length 3 that contains the number of filters in each convolutional layer
+    :param kernel_size: tuple of length 2
+    :param stage: integer, goes into names of the layers
+    :param block: integer, goes into names of the layers
+    :param regularizer: keras regularizer to be used in the block
+    :param trainable: bool, False is the layer is supposed to be frozen during training
+    :return:
+    """
     f1, f2, f3 = filters
     shortcut = x
 
@@ -31,6 +42,18 @@ def identity(x, filters, kernel_size, stage, block, regularizer=None, trainable=
 
 
 def conv(x, filters, kernel_size, stage, block, strides=(2, 2), regularizer=None, trainable=True):
+    """Create a convolutional residual block
+
+    :param x:
+    :param filters: tuple of length 3 that contains the number of filters in each convolutional layer
+    :param kernel_size: tuple of length 2
+    :param stage: integer, goes into names of the layers
+    :param block: integer, goes into names of the layers
+    :param strides: tuple of length 2
+    :param regularizer: keras regularizer to be used in the block
+    :param trainable: bool, False is the layer is supposed to be frozen during training
+    :return:
+    """
     f1, f2, f3 = filters
     shortcut = x
 

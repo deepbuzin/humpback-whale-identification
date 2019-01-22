@@ -6,6 +6,11 @@ import tensorflow as tf
 
 
 def euclidean_distance(embeddings):
+    """Compute the 2D matrix of pairwise euclidean distances between embeddings.
+
+    :param embeddings: tensor of shape (batch_size, embedding_size)
+    :return dist: tensor of shape (batch_size, batch_size)
+    """
     prod = tf.matmul(embeddings, tf.transpose(embeddings))
     sq_norms = tf.diag_part(prod)
 
@@ -19,6 +24,12 @@ def euclidean_distance(embeddings):
 
 
 def valid_triplets_mask(labels):
+    """Compute the 3D boolean mask where mask[a, p, n] is True if (a, p, n) is a valid triplet,
+    as in a, p, n are distinct and labels[a] == labels[p], labels[a] != labels[n].
+
+    :param labels: tensor of shape (batch_size,)
+    :return mask: tf.bool tensor of shape (batch_size, batch_size, batch_size)
+    """
     indices_equal = tf.cast(tf.eye(tf.shape(labels)[0]), tf.bool)
     indices_not_equal = tf.logical_not(indices_equal)
     i_not_equal_j = tf.expand_dims(indices_not_equal, 2)
@@ -36,6 +47,11 @@ def valid_triplets_mask(labels):
 
 
 def valid_anchor_positive_mask(labels):
+    """Compute a 2D boolean mask where mask[a, p] is True if a and p are distinct and have the same label.
+
+    :param labels: tensor of shape (batch_size,)
+    :return mask: tf.bool tensor of shape (batch_size, batch_size)
+    """
     indices_equal = tf.cast(tf.eye(tf.shape(labels)[0]), tf.bool)
     indices_not_equal = tf.logical_not(indices_equal)
 
@@ -45,13 +61,31 @@ def valid_anchor_positive_mask(labels):
 
 
 def valid_anchor_negative_mask(labels):
+    """Compute a 2D boolean mask where mask[a, n] is True if a and n have distinct label.
+
+    :param labels: tensor of shape (batch_size,)
+    :return mask: tf.bool tensor of shape (batch_size, batch_size)
+    """
     labels_equal = tf.equal(tf.expand_dims(labels, 0), tf.expand_dims(labels, 1))
     mask = tf.logical_not(labels_equal)
     return mask
 
 
 def triplet_loss(margin=0.2, strategy='batch_all', metric=euclidean_distance):
+    """Compute the triplet loss over the batch of embeddings.
+
+    :param margin: margin that is going to be enforced by the triplet loss
+    :param strategy: string, that indicated whether we're using the 'batch hard' or the 'batch all' mining strategy
+    :param metric: a callback function that we use to calculate the distance between each pair of vectors
+    :return: a callback function that calculates the loss according to the specified mining strategy
+    """
     def batch_all(labels, embeddings):
+        """Compute the loss by generating all the valid triplets and averaging over the positive ones
+
+        :param labels: tensor of shape (batch_size,)
+        :param embeddings: tensor of shape (batch_size, embedding_size)
+        :return loss: scalar tensor
+        """
         dist = metric(embeddings)
 
         anchor_positive_dist = tf.expand_dims(dist, 2)
@@ -68,6 +102,12 @@ def triplet_loss(margin=0.2, strategy='batch_all', metric=euclidean_distance):
         return loss
 
     def batch_hard(labels, embeddings):
+        """Compute the loss on the triplet consisting of the hardest positive and the hardest negative
+
+        :param labels: tensor of shape (batch_size,)
+        :param embeddings: tensor of shape (batch_size, embedding_size)
+        :return loss: scalar tensor
+        """
         dist = metric(embeddings)
 
         ap_mask = tf.to_float(valid_anchor_positive_mask(labels))

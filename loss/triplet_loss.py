@@ -50,7 +50,7 @@ def valid_anchor_negative_mask(labels):
     return mask
 
 
-def triplet_loss(margin=0.2, metric=euclidean_distance, strategy='batch_all'):
+def triplet_loss(margin=0.2, strategy='batch_all', metric=euclidean_distance):
     def batch_all(labels, embeddings):
         dist = metric(embeddings)
 

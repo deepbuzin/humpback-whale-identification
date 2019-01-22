@@ -65,7 +65,7 @@ class Siamese(object):
         for i, w in enumerate(whales):
             mapping[w] = i
         data = csv_data.replace({'Id': mapping})
-        return data.values()
+        return data.values
 
     def save_model(self):
         pass

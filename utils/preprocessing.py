@@ -7,9 +7,6 @@ import cv2
 from os.path import join
 
 
-img_dir = 'D:/IdeaProjects/whales/data/train'
-
-
 def fetch(img_dir, name):
     img = cv2.imread(join(img_dir, name))
     if img.shape == 2:

@@ -9,6 +9,7 @@ from keras.optimizers import Adam
 from keras.callbacks import ModelCheckpoint
 
 from model.resnet import resnet_like_33, resnet_like_36
+from model.shallow import mnist_5
 from loss.triplet_loss import triplet_loss
 from utils.sequence import WhalesSequence
 
@@ -26,6 +27,8 @@ class Siamese(object):
             return resnet_like_33(input_shape=input_shape, embedding_size=embedding_size)
         elif model_name == 'resnet_like_36':
             return resnet_like_36(input_shape=input_shape, embedding_size=embedding_size)
+        elif model_name == 'shallow_mnist':
+            return mnist_5(input_shape=input_shape, embedding_size=embedding_size)
         else:
             raise ValueError('no such model: %s' % model_name)
 

@@ -56,11 +56,13 @@ class Siamese(object):
         whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data[:, 0], batch_size=batch_size)
         pred = self.model.predict_generator(whales, verbose=1)
 
+        whales_df = pd.DataFrame(data=whales_data, columns=['Image', 'Id'])
         pred_df = pd.DataFrame(data=pred)
-        pred_df = pd.concat([pred_df, pd.DataFrame(data=whales_data)], axis=1)
+        pred_df = pd.concat([pred_df, whales_df], axis=1)
         pred_df = pred_df.drop(['Image'], axis=1)
         self.embeddings = pred_df.groupby(['Id']).mean().reset_index()
-        np.save('embeddings', self.embeddings)
+        # np.save('embeddings', self.embeddings)
+        self.embeddings.to_pickle('embeddings.pkl')
 
     def predict(self, img_dir):
         assert self.embeddings is not None
@@ -68,7 +70,10 @@ class Siamese(object):
         whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data, batch_size=1)
         whales = self.model.predict_generator(whales_seq, verbose=1)
 
-        concat = np.concatenate((self.embeddings, whales), axis=0)
+        np.save('whales', whales)
+
+        embeddings = self.embeddings.drop(['Id'], axis=1)
+        concat = np.concatenate((embeddings, whales), axis=0)
         prod = np.dot(concat, np.transpose(concat))
         sq_norms = np.reshape(np.diag(prod), (-1, 1))
 
@@ -76,14 +81,16 @@ class Siamese(object):
         dist = np.maximum(dist, 0.0)
         dist = dist[self.embeddings.shape[0]:, :self.embeddings.shape[0]]
 
-        predictions = np.apply_along_axis(np.argpartition, 0, dist, 5)
+        predictions = np.apply_along_axis(np.argpartition, 1, dist, 5)
         np.save('predictions', predictions)
+        # TODO change all saves ro pickles for consistency
 
     def save_embeddings(self, filename):
         np.save(filename, self.embeddings)
 
     def load_embeddings(self, filename):
-        self.embeddings = np.load(filename)
+        # TODO clean up this mess
+        self.embeddings = pd.DataFrame(data=np.load(filename), columns=(['Id'] + (list(range(128)))))
 
     @staticmethod
     def _read_csv(csv):
@@ -94,6 +101,9 @@ class Siamese(object):
             mapping[w] = i
         data = csv_data.replace({'Id': mapping})
         return data.values
+        # TODO cache mappings for inference
+        # TODO or basically just cache the whole state i guess
+        # TODO reverse mapping
 
     def save_model(self):
         pass

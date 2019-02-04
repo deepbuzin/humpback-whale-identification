@@ -5,6 +5,8 @@ from __future__ import print_function
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
 import os
 from time import strftime, gmtime
 
@@ -24,6 +26,7 @@ from utils.sequence import WhalesSequence
 # config.gpu_options.per_process_gpu_memory_fraction = 0.5
 # set_session(tf.Session(config=config))
 
+
 class Siamese(object):
     def __init__(self, model, strategy='batch_all', input_shape=(384, 512, 3), embedding_size=128):
         self.strategy = strategy
@@ -35,11 +38,11 @@ class Siamese(object):
 
         self.cache_dir = os.path.join('cache', strftime("cache-%y%m%d-%H%M%S", gmtime()))
         if not os.path.isdir(self.cache_dir):
-            os.mkdir(self.cache_dir)
+            os.makedirs(self.cache_dir)
         if not os.path.isdir(os.path.join(self.cache_dir, 'training')):
-            os.mkdir(os.path.join(self.cache_dir, 'training'))
+            os.makedirs(os.path.join(self.cache_dir, 'training'))
         if not os.path.isdir(os.path.join(self.cache_dir, 'debug')):
-            os.mkdir(os.path.join(self.cache_dir, 'debug'))
+            os.makedirs(os.path.join(self.cache_dir, 'debug'))
         self.model = Siamese.build_model(model, input_shape, embedding_size)
 
     @staticmethod
@@ -95,10 +98,10 @@ class Siamese(object):
         dist = dist[self.embeddings.shape[0]:, :self.embeddings.shape[0]]
 
         predictions = np.apply_along_axis(np.argpartition, 1, dist, 5)
-        self.predictions = pd.DataFrame(data=predictions)
-        self.predictions = pd.concat([whales_data, self.predictions], axis=1)
+        self.predictions = pd.DataFrame(data=predictions[:, :5])
+        self.predictions = pd.concat([pd.DataFrame(data=whales_data), self.predictions], axis=1)
         self.predictions.columns = ['Image'] + list(range(5))
-        self.save_predictions(os.path.join(self.cache_dir, 'predictions'))
+        self.save_predictions(os.path.join(self.cache_dir, 'predictions.pkl'))
 
     def save_weights(self, filename):
         self.model.save_weights(filename)
@@ -145,8 +148,8 @@ class Siamese(object):
         ax.scatter(tsne[:, 0], tsne[:, 1], tsne[:, 2])
         plt.show()
 
-    def make_kaggle_csv(self):
-        mapping = np.load(os.path.join(self.cache_dir, 'idx_to_whales_mapping')).item()
+    def make_kaggle_csv(self, mapping_file):
+        mapping = np.load(mapping_file).item()
         predictions = self.predictions.replace({0: mapping, 1: mapping, 2: mapping, 3: mapping, 4: mapping})
         print(predictions)
 

@@ -142,7 +142,7 @@ class Siamese(object):
 
     @staticmethod
     def draw_tsne(vectors):
-        tsne = TSNE(n_components=3, verbose=1, n_iter=300).fit_transform(vectors)
+        tsne = TSNE(n_components=3, verbose=1, n_iter=300, perplexity=50).fit_transform(vectors)
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
         ax.scatter(tsne[:, 0], tsne[:, 1], tsne[:, 2])

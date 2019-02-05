@@ -150,8 +150,11 @@ class Siamese(object):
 
     def make_kaggle_csv(self, mapping_file):
         mapping = np.load(mapping_file).item()
+        for k in mapping:
+            mapping[k] = mapping[k][0]
         predictions = self.predictions.replace({0: mapping, 1: mapping, 2: mapping, 3: mapping, 4: mapping})
-        print(predictions)
+        predictions['Id'] = predictions[0] + ' ' + predictions[1] + ' ' + predictions[2] + ' ' + predictions[3] + ' ' + predictions[4]
+        predictions.to_csv(os.path.join(self.cache_dir, 'submission.csv'), index=False, columns=['Image', 'Id'])
 
 
 

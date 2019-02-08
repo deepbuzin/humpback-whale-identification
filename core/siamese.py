@@ -14,6 +14,7 @@ from keras.optimizers import Adam
 from keras.callbacks import ModelCheckpoint
 from sklearn.manifold import TSNE
 
+from model.mobilenet import mobilenet_like
 from model.resnet import resnet_like_33, resnet_like_36
 from model.shallow import mnist_5
 from loss.triplet_loss import triplet_loss
@@ -47,7 +48,9 @@ class Siamese(object):
 
     @staticmethod
     def build_model(model_name, input_shape, embedding_size):
-        if model_name == 'resnet_like_33':
+        if model_name == 'mobilenet_like':
+            return mobilenet_like(input_shape=input_shape, embedding_size=embedding_size)
+        elif model_name == 'resnet_like_33':
             return resnet_like_33(input_shape=input_shape, embedding_size=embedding_size)
         elif model_name == 'resnet_like_36':
             return resnet_like_36(input_shape=input_shape, embedding_size=embedding_size)
@@ -107,7 +110,7 @@ class Siamese(object):
         self.model.save_weights(filename)
 
     def load_weights(self, filename):
-        self.model.load_weights(filename, by_name=True)
+        self.model.load_weights(filename, by_name=True, skip_mismatch=True)
 
     def save_embeddings(self, filename):
         self.embeddings.to_pickle(filename)

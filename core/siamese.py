@@ -11,7 +11,7 @@ import os
 from time import strftime, gmtime
 
 from keras.optimizers import Adam
-from keras.callbacks import ModelCheckpoint
+from keras.callbacks import ModelCheckpoint, TensorBoard
 from sklearn.manifold import TSNE
 
 from model.mobilenet import mobilenet_like
@@ -67,7 +67,8 @@ class Siamese(object):
         whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data[:, 0], y_set=whales_data[:, 1], batch_size=batch_size)
         self.model.fit_generator(whales,
                                  epochs=epochs,
-                                 callbacks=[ModelCheckpoint(filepath=os.path.join(self.cache_dir, 'training', 'checkpoint-{epoch:02d}.h5'), save_weights_only=True)])
+                                 callbacks=[ModelCheckpoint(filepath=os.path.join(self.cache_dir, 'training', 'checkpoint-{epoch:02d}.h5'), save_weights_only=True),
+                                            TensorBoard(embeddings_layer_names=['embeddings'])])
         self.model.save(os.path.join(self.cache_dir, 'final_model.h5'))
         self.save_weights(os.path.join(self.cache_dir, 'final_weights.h5'))
 

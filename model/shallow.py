@@ -24,7 +24,7 @@ def mnist_5(input_shape=(28, 28, 3), embedding_size=64):
 
     x = Flatten()(x)
     x = Dense(64, activation='relu', kernel_initializer=glorot_uniform())(x)
-    x = Dense(embedding_size, kernel_initializer=glorot_uniform())(x)
+    x = Dense(embedding_size, kernel_initializer=glorot_uniform(), name='embeddings')(x)
 
     model = Model(inputs=img, outputs=x, name='shallow_mnist')
     model.summary()

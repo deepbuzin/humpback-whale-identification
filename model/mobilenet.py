@@ -8,7 +8,7 @@ from keras.initializers import glorot_uniform
 from keras.models import Model
 
 
-def separable(x, filters_pw, block_num, strides=(1, 1)):
+def separable(x, filters_pw, block_num, strides=(1, 1), trainable=True):
     if strides != (1, 1):
         x = ZeroPadding2D(((0, 1), (0, 1)), name='conv_pad_%d' % block_num)(x)
     x = DepthwiseConv2D(kernel_size=(3, 3),
@@ -16,8 +16,9 @@ def separable(x, filters_pw, block_num, strides=(1, 1)):
                         padding='same' if strides == (1, 1) else 'valid',
                         use_bias=False,
                         depthwise_initializer=glorot_uniform(),
+                        trainable=trainable,
                         name='conv_dw_%d' % block_num)(x)
-    x = BatchNormalization(name='conv_dw_%d_bn' % block_num)(x)
+    x = BatchNormalization(trainable=trainable, name='conv_dw_%d_bn' % block_num)(x)
     x = ReLU(6., name='conv_dw_%d_relu' % block_num)(x)
 
     x = Conv2D(filters=filters_pw,
@@ -26,8 +27,9 @@ def separable(x, filters_pw, block_num, strides=(1, 1)):
                padding='same',
                use_bias=False,
                kernel_initializer=glorot_uniform(),
+               trainable=trainable,
                name='conv_pw_%d' % block_num)(x)
-    x = BatchNormalization(name='conv_pw_%d_bn' % block_num)(x)
+    x = BatchNormalization(trainable=trainable, name='conv_pw_%d_bn' % block_num)(x)
     x = ReLU(6., name='conv_pw_%d_relu' % block_num)(x)
     return x
 
@@ -83,23 +85,23 @@ def mobilenet_like(input_shape=(672, 896, 3), embedding_size=128):
     x = BatchNormalization(name='conv1_bn')(x)
     x = ReLU(6., name='conv1_relu')(x)
 
-    x = separable(x, filters_pw=64, block_num=1, strides=(1, 1))
+    x = separable(x, filters_pw=64, block_num=1, strides=(1, 1), trainable=False)
 
-    x = separable(x, filters_pw=128, block_num=2, strides=(2, 2))
-    x = separable(x, filters_pw=128, block_num=3, strides=(1, 1))
+    x = separable(x, filters_pw=128, block_num=2, strides=(2, 2), trainable=False)
+    x = separable(x, filters_pw=128, block_num=3, strides=(1, 1), trainable=False)
 
-    x = separable(x, filters_pw=256, block_num=4, strides=(2, 2))
-    x = separable(x, filters_pw=256, block_num=5, strides=(1, 1))
+    x = separable(x, filters_pw=256, block_num=4, strides=(2, 2), trainable=False)
+    x = separable(x, filters_pw=256, block_num=5, strides=(1, 1), trainable=False)
 
-    x = separable(x, filters_pw=512, block_num=6, strides=(2, 2))
-    x = separable(x, filters_pw=512, block_num=7, strides=(1, 1))
-    x = separable(x, filters_pw=512, block_num=8, strides=(1, 1))
-    x = separable(x, filters_pw=512, block_num=9, strides=(1, 1))
-    x = separable(x, filters_pw=512, block_num=10, strides=(1, 1))
-    x = separable(x, filters_pw=512, block_num=11, strides=(1, 1))
+    x = separable(x, filters_pw=512, block_num=6, strides=(2, 2), trainable=False)
+    x = separable(x, filters_pw=512, block_num=7, strides=(1, 1), trainable=False)
+    x = separable(x, filters_pw=512, block_num=8, strides=(1, 1), trainable=False)
+    x = separable(x, filters_pw=512, block_num=9, strides=(1, 1), trainable=False)
+    x = separable(x, filters_pw=512, block_num=10, strides=(1, 1), trainable=False)
+    x = separable(x, filters_pw=512, block_num=11, strides=(1, 1), trainable=False)
 
-    x = separable(x, filters_pw=1024, block_num=12, strides=(2, 2))
-    x = separable(x, filters_pw=1024, block_num=13, strides=(1, 1))
+    x = separable(x, filters_pw=1024, block_num=12, strides=(2, 2), trainable=False)
+    x = separable(x, filters_pw=1024, block_num=13, strides=(1, 1), trainable=False)
 
     x = GlobalMaxPooling2D(name='glob_max_pool')(x)
     x = Reshape((1, 1, -1), name='reshape_1')(x)

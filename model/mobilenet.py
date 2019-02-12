@@ -109,7 +109,7 @@ def mobilenet_like(input_shape=(672, 896, 3), embedding_size=128):
     x = Conv2D(512, (1, 1), padding='same', name='conv_emb_1')(x)
     x = Conv2D(embedding_size, (1, 1), padding='same', name='conv_emb_2')(x)
 
-    x = Reshape((embedding_size,), name='reshape_2')(x)
+    x = Reshape((embedding_size,), name='embeddings')(x)
 
     model = Model(inputs=img, outputs=x)
     return model

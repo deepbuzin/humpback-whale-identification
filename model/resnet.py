@@ -141,7 +141,7 @@ def resnet_like_33(input_shape=(384, 512, 3), embedding_size=128):
     x = AveragePooling2D((int(input_shape[0]//64), int(input_shape[0]//64)))(x)
     x = Flatten()(x)
     x = Dense(512, activation='relu', kernel_initializer=glorot_uniform())(x)
-    x = Dense(embedding_size, kernel_initializer=glorot_uniform())(x)
+    x = Dense(embedding_size, kernel_initializer=glorot_uniform(), name='embeddings')(x)
 
     model = Model(inputs=img, outputs=x, name='resnet_like_33')
     return model
@@ -172,7 +172,7 @@ def resnet_like_36(input_shape=(768, 1024, 3), embedding_size=128):
     x = AveragePooling2D((int(input_shape[0]//128), int(input_shape[0]//128)))(x)
     x = Flatten()(x)
     x = Dense(512, activation='relu', kernel_initializer=glorot_uniform())(x)
-    x = Dense(embedding_size, kernel_initializer=glorot_uniform())(x)
+    x = Dense(embedding_size, kernel_initializer=glorot_uniform(), name='embeddings')(x)
 
     model = Model(inputs=img, outputs=x, name='ResNet_siamese')
     model.summary()

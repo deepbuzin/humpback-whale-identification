@@ -49,7 +49,7 @@ class Siamese(object):
     @staticmethod
     def build_model(model_name, input_shape, embedding_size):
         if model_name == 'mobilenet_like':
-            return mobilenet_like(input_shape=input_shape, embedding_size=embedding_size)
+            return mobilenet_like(input_shape=input_shape, embedding_size=embedding_size, train_hidden_layers=True)
         elif model_name == 'resnet_like_33':
             return resnet_like_33(input_shape=input_shape, embedding_size=embedding_size)
         elif model_name == 'resnet_like_36':
@@ -160,7 +160,13 @@ class Siamese(object):
         predictions['Id'] = predictions[0] + ' ' + predictions[1] + ' ' + predictions[2] + ' ' + predictions[3] + ' ' + predictions[4]
         predictions.to_csv(os.path.join(self.cache_dir, 'submission.csv'), index=False, columns=['Image', 'Id'])
 
-
+    def make_csv(self, mapping_file):
+        mapping = np.load(mapping_file).item()
+        for k in mapping:
+            mapping[k] = mapping[k][0]
+        predictions = self.predictions.replace({0: mapping, 1: mapping, 2: mapping, 3: mapping, 4: mapping})
+        predictions['Id'] = predictions[0]
+        predictions.to_csv(os.path.join(self.cache_dir, 'prediction.csv'), index=False, columns=['Image', 'Id'])
 
 
 

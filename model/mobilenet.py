@@ -73,7 +73,7 @@ def MobileNet(input_shape=(224, 224, 3), num_classes=1000):
     return model
 
 
-def mobilenet_like(input_shape=(672, 896, 3), embedding_size=128):
+def mobilenet_like(input_shape=(672, 896, 3), embedding_size=128, train_hidden_layers=True):
     img = Input(input_shape)
 
     x = Conv2D(32, (3, 3), strides=(3, 4), padding='valid', use_bias=False, kernel_initializer=glorot_uniform(), name='conv0')(img)
@@ -85,23 +85,23 @@ def mobilenet_like(input_shape=(672, 896, 3), embedding_size=128):
     x = BatchNormalization(name='conv1_bn')(x)
     x = ReLU(6., name='conv1_relu')(x)
 
-    x = separable(x, filters_pw=64, block_num=1, strides=(1, 1), trainable=False)
+    x = separable(x, filters_pw=64, block_num=1, strides=(1, 1), trainable=train_hidden_layers)
 
-    x = separable(x, filters_pw=128, block_num=2, strides=(2, 2), trainable=False)
-    x = separable(x, filters_pw=128, block_num=3, strides=(1, 1), trainable=False)
+    x = separable(x, filters_pw=128, block_num=2, strides=(2, 2), trainable=train_hidden_layers)
+    x = separable(x, filters_pw=128, block_num=3, strides=(1, 1), trainable=train_hidden_layers)
 
-    x = separable(x, filters_pw=256, block_num=4, strides=(2, 2), trainable=False)
-    x = separable(x, filters_pw=256, block_num=5, strides=(1, 1), trainable=False)
+    x = separable(x, filters_pw=256, block_num=4, strides=(2, 2), trainable=train_hidden_layers)
+    x = separable(x, filters_pw=256, block_num=5, strides=(1, 1), trainable=train_hidden_layers)
 
-    x = separable(x, filters_pw=512, block_num=6, strides=(2, 2), trainable=False)
-    x = separable(x, filters_pw=512, block_num=7, strides=(1, 1), trainable=False)
-    x = separable(x, filters_pw=512, block_num=8, strides=(1, 1), trainable=False)
-    x = separable(x, filters_pw=512, block_num=9, strides=(1, 1), trainable=False)
-    x = separable(x, filters_pw=512, block_num=10, strides=(1, 1), trainable=False)
-    x = separable(x, filters_pw=512, block_num=11, strides=(1, 1), trainable=False)
+    x = separable(x, filters_pw=512, block_num=6, strides=(2, 2), trainable=train_hidden_layers)
+    x = separable(x, filters_pw=512, block_num=7, strides=(1, 1), trainable=train_hidden_layers)
+    x = separable(x, filters_pw=512, block_num=8, strides=(1, 1), trainable=train_hidden_layers)
+    x = separable(x, filters_pw=512, block_num=9, strides=(1, 1), trainable=train_hidden_layers)
+    x = separable(x, filters_pw=512, block_num=10, strides=(1, 1), trainable=train_hidden_layers)
+    x = separable(x, filters_pw=512, block_num=11, strides=(1, 1), trainable=train_hidden_layers)
 
-    x = separable(x, filters_pw=1024, block_num=12, strides=(2, 2), trainable=False)
-    x = separable(x, filters_pw=1024, block_num=13, strides=(1, 1), trainable=False)
+    x = separable(x, filters_pw=1024, block_num=12, strides=(2, 2), trainable=train_hidden_layers)
+    x = separable(x, filters_pw=1024, block_num=13, strides=(1, 1), trainable=train_hidden_layers)
 
     x = GlobalMaxPooling2D(name='glob_max_pool')(x)
     x = Reshape((1, 1, -1), name='reshape_1')(x)

@@ -68,7 +68,7 @@ class Siamese(object):
         self.model.fit_generator(whales,
                                  epochs=epochs,
                                  callbacks=[ModelCheckpoint(filepath=os.path.join(self.cache_dir, 'training', 'checkpoint-{epoch:02d}.h5'), save_weights_only=True),
-                                            TensorBoard(embeddings_layer_names=['embeddings'])])
+                                            TensorBoard(embeddings_layer_names=['embeddings'], log_dir=os.path.join(self.cache_dir, 'tensorboard_logs'))])
         self.model.save(os.path.join(self.cache_dir, 'final_model.h5'))
         self.save_weights(os.path.join(self.cache_dir, 'final_weights.h5'))
 

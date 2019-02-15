@@ -1,0 +1,7 @@
+{
+    "model": "dummy",
+    "input_shape": [672, 896, 3],
+    "embedding_size": 128,
+    "strategy": "batch_all",
+    "cache_dir": ""
+}

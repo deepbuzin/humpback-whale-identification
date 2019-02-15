@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 import os
+import shutil
+import json
 from time import strftime, gmtime
 
 from keras.optimizers import Adam
@@ -17,6 +19,7 @@ from sklearn.manifold import TSNE
 from model.mobilenet import mobilenet_like
 from model.resnet import resnet_like_33, resnet_like_36
 from model.shallow import mnist_5
+from model.dummy import dummy
 from loss.triplet_loss import triplet_loss
 from utils.sequence import WhalesSequence
 
@@ -30,6 +33,7 @@ from utils.sequence import WhalesSequence
 
 class Siamese(object):
     def __init__(self, model, strategy='batch_all', input_shape=(384, 512, 3), embedding_size=128):
+        self.model_name = model
         self.strategy = strategy
         self.input_shape = input_shape
         self.embedding_size = embedding_size
@@ -46,6 +50,8 @@ class Siamese(object):
             os.makedirs(os.path.join(self.cache_dir, 'debug'))
         self.model = Siamese.build_model(model, input_shape, embedding_size)
 
+        self.write_config()
+
     @staticmethod
     def build_model(model_name, input_shape, embedding_size):
         if model_name == 'mobilenet_like':
@@ -56,6 +62,8 @@ class Siamese(object):
             return resnet_like_36(input_shape=input_shape, embedding_size=embedding_size)
         elif model_name == 'shallow_mnist':
             return mnist_5(input_shape=input_shape, embedding_size=embedding_size)
+        elif model_name == 'dummy':
+            return dummy(input_shape=input_shape, embedding_size=embedding_size)
         else:
             raise ValueError('no such model: %s' % model_name)
 
@@ -63,7 +71,7 @@ class Siamese(object):
         self.model.summary()
         self.model.compile(optimizer=Adam(learning_rate), loss=triplet_loss(margin, self.strategy))
 
-        whales_data = self._read_csv(csv)
+        whales_data = self._read_csv(csv, write_mappings=True)
         whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data[:, 0], y_set=whales_data[:, 1], batch_size=batch_size)
         self.model.fit_generator(whales,
                                  epochs=epochs,
@@ -81,7 +89,8 @@ class Siamese(object):
         pred_df = pd.DataFrame(data=pred)
         pred_df = pd.concat([pred_df, whales_df], axis=1)
         pred_df = pred_df.drop(['Image'], axis=1)
-        self.embeddings = pred_df.groupby(['Id']).mean().reset_index()
+        pred_df = pred_df.groupby(['Id']).mean().reset_index()
+        self.embeddings = pred_df.sort_values(by=['Id'])
         self.save_embeddings(os.path.join(self.cache_dir, 'embeddings.pkl'))
 
     def predict(self, img_dir):
@@ -101,7 +110,7 @@ class Siamese(object):
         dist = np.maximum(dist, 0.0)
         dist = dist[self.embeddings.shape[0]:, :self.embeddings.shape[0]]
 
-        predictions = np.apply_along_axis(np.argpartition, 1, dist, 5)
+        predictions = np.apply_along_axis(np.argpartition, 1, dist, 4)
         self.predictions = pd.DataFrame(data=predictions[:, :5])
         self.predictions = pd.concat([pd.DataFrame(data=whales_data), self.predictions], axis=1)
         self.predictions.columns = ['Image'] + list(range(5))
@@ -131,7 +140,7 @@ class Siamese(object):
     def load_state(self, filename):
         pass
 
-    def _read_csv(self, csv):
+    def _read_csv(self, csv, write_mappings=False):
         csv_data = pd.read_csv(csv)
         whales = np.sort(csv_data['Id'].unique())
         mapping = {}
@@ -140,8 +149,9 @@ class Siamese(object):
             mapping[w] = i
             reverse_mapping[i] = [w]
         data = csv_data.replace({'Id': mapping})
-        np.save(os.path.join(self.cache_dir, 'whales_to_idx_mapping'), mapping)
-        np.save(os.path.join(self.cache_dir, 'idx_to_whales_mapping'), reverse_mapping)
+        if write_mappings:
+            np.save(os.path.join(self.cache_dir, 'whales_to_idx_mapping'), mapping)
+            np.save(os.path.join(self.cache_dir, 'idx_to_whales_mapping'), reverse_mapping)
         return data.values
 
     @staticmethod
@@ -168,6 +178,48 @@ class Siamese(object):
         predictions['Id'] = predictions[0]
         predictions.to_csv(os.path.join(self.cache_dir, 'prediction.csv'), index=False, columns=['Image', 'Id'])
 
+    def write_config(self):
+        config = {
+            'model': self.model_name,
+            'input_shape': self.input_shape,
+            'embedding_size': self.embedding_size,
+            'strategy': self.strategy,
+            'cache_dir': self.cache_dir
+        }
+        with open(os.path.join(self.cache_dir, 'config.json'), 'w') as f:
+            json.dump(config, f)
+
+    @staticmethod
+    def restore_from_config(filename):
+        with open(filename) as f:
+            config = json.load(f)
+            assert 'model' in config
+            assert 'input_shape' in config
+            assert 'embedding_size' in config
+            assert 'strategy' in config
+            assert 'cache_dir' in config
+
+            model = Siamese(config['model'], config['strategy'], config['input_shape'], config['embedding_size'])
+
+            shutil.rmtree(model.cache_dir)
+            cd = config['cache_dir']
+            model.cache_dir = cd
+
+            if os.path.isfile(os.path.join(cd, 'final_weights.h5')):
+                model.load_weights(os.path.join(cd, 'final_weights.h5'))
+                print('loaded weights from %s' % os.path.join(cd, 'final_weights.h5'))
+            elif os.path.isdir(os.path.join(cd, 'training')):
+                model.load_weights(os.path.join(cd, 'training', os.listdir(os.path.join(cd, 'training'))[-1]))
+                print('loaded weights from %s' % os.path.join(cd, 'training', os.listdir(os.path.join(cd, 'training'))[-1]))
+
+            if os.path.isfile(os.path.join(cd, 'embeddings.pkl')):
+                model.load_embeddings(os.path.join(cd, 'embeddings.pkl'))
+                print('loaded embeddings from %s' % os.path.join(cd, 'embeddings.pkl'))
+            if os.path.isfile(os.path.join(cd, 'predictions.pkl')):
+                model.load_predictions(os.path.join(cd, 'predictions.pkl'))
+                print('loaded predictions from %s' % os.path.join(cd, 'predictions.pkl'))
+
+            return model
 
 
 

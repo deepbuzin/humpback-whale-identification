@@ -1,8 +1,9 @@
 from core.siamese import Siamese
 
 
-model = Siamese('shallow_mnist', input_shape=(28, 28, 3), embedding_size=64, strategy='batch_all')
-model.load_weights('cache/cache-190213-131256/training/checkpoint-07.h5')
+# model = Siamese('shallow_mnist', input_shape=(28, 28, 3), embedding_size=64, strategy='batch_all')
+# model.load_weights('cache/cache-190213-131256/training/checkpoint-07.h5')
+model = Siamese.restore_from_config('cache/cache-190220-203237/config.json')
 model.make_embeddings('data_mnist/train.csv', 'data_mnist/train', batch_size=200)
 model.predict('data_mnist/train_subset')
 model.make_csv('cache/cache-190213-131256/idx_to_whales_mapping.npy')

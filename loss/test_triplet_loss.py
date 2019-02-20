@@ -1,12 +1,11 @@
 import numpy as np
 import tensorflow as tf
 
-from loss import euclidean_distance
-from loss import batch_all
-from loss import batch_hard
-from loss import valid_triplets_mask
-from loss import valid_anchor_positive_mask
-from loss import valid_anchor_negative_mask
+from loss.triplet_loss import euclidean_distance
+from loss.triplet_loss import triplet_loss
+from loss.triplet_loss import valid_triplets_mask
+from loss.triplet_loss import valid_anchor_positive_mask
+from loss.triplet_loss import valid_anchor_negative_mask
 
 
 def euclidean_distance_np(feature):
@@ -128,7 +127,7 @@ def test_simple_batch_all_triplet_loss():
     labels = np.random.randint(0, num_classes, size=num_data).astype(np.float32)
 
     loss_np = 0.0
-    loss_tf = batch_all(labels, embeddings, margin)
+    loss_tf = triplet_loss(margin, 'batch_all')(labels, embeddings)
     with tf.Session() as sess:
         loss_tf_val = sess.run(loss_tf)
     assert np.allclose(loss_np, loss_tf_val)
@@ -166,7 +165,7 @@ def test_batch_all_triplet_loss():
 
     loss_np /= num_positives
 
-    loss_tf = batch_all(labels, embeddings, margin)
+    loss_tf = triplet_loss(margin, 'batch_all')(labels, embeddings)
     with tf.Session() as sess:
         loss_tf_val = sess.run(loss_tf)
     assert np.allclose(loss_np, loss_tf_val)
@@ -194,7 +193,7 @@ def test_batch_hard_triplet_loss():
 
     loss_np /= num_data
 
-    loss_tf = batch_hard(labels, embeddings, margin)
+    loss_tf = triplet_loss(margin, 'batch_hard')(labels, embeddings)
     with tf.Session() as sess:
         loss_tf_val = sess.run(loss_tf)
     assert np.allclose(loss_np, loss_tf_val)

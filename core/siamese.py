@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import cv2
 
 import os
 import shutil
@@ -13,7 +14,8 @@ import json
 from time import strftime, gmtime
 
 from keras.optimizers import Adam
-from keras.callbacks import ModelCheckpoint, TensorBoard
+from keras.callbacks import ModelCheckpoint
+from utils.callbacks import TensorBoard
 from sklearn.manifold import TSNE
 
 from model.mobilenet import mobilenet_like
@@ -67,7 +69,13 @@ class Siamese(object):
         else:
             raise ValueError('no such model: %s' % model_name)
 
-    def train(self, csv, img_dir, epochs=10, batch_size=10, learning_rate=0.001, margin=0.5):
+    @staticmethod
+    def get_vis_data(meta_dir):
+        names = os.listdir(os.path.join(meta_dir, 'img'))
+        imgs = [cv2.cvtColor(cv2.imread(os.path.join(meta_dir, 'img', name)), cv2.COLOR_BGR2RGB) for name in names]
+        return np.array(imgs).reshape((-1, 28, 28, 3))
+
+    def train(self, csv, img_dir, meta_dir, epochs=10, batch_size=10, learning_rate=0.001, margin=0.5):
         self.model.summary()
         self.model.compile(optimizer=Adam(learning_rate), loss=triplet_loss(margin, self.strategy))
 
@@ -76,7 +84,14 @@ class Siamese(object):
         self.model.fit_generator(whales,
                                  epochs=epochs,
                                  callbacks=[ModelCheckpoint(filepath=os.path.join(self.cache_dir, 'training', 'checkpoint-{epoch:02d}.h5'), save_weights_only=True),
-                                            TensorBoard(embeddings_layer_names=['embeddings'], log_dir=os.path.join(self.cache_dir, 'tensorboard_logs'))])
+                                            TensorBoard(update_freq='epoch',
+                                                        embeddings_freq=1,
+                                                        embeddings_data=self.get_vis_data(meta_dir),
+                                                        embeddings_metadata=os.path.join(meta_dir, 'metadata.tsv'),
+                                                        embeddings_sprite=os.path.join(meta_dir, 'sprite.png'),
+                                                        embeddings_sprite_single_image_size=(28, 28),  # TODO fix for whales
+                                                        embeddings_layer_names=['embeddings'],
+                                                        log_dir=os.path.join(self.cache_dir, 'tensorboard_logs'))])
         self.model.save(os.path.join(self.cache_dir, 'final_model.h5'))
         self.save_weights(os.path.join(self.cache_dir, 'final_weights.h5'))
 

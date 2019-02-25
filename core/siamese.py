@@ -22,7 +22,7 @@ from model.mobilenet import mobilenet_like
 from model.resnet import resnet_like_33, resnet_like_36
 from model.shallow import mnist_5
 from model.dummy import dummy
-from loss.triplet_loss import triplet_loss
+from loss.triplet_loss import triplet_loss, soft_margin_triplet_loss
 from utils.sequence import WhalesSequence
 
 # import tensorflow as tf
@@ -77,7 +77,8 @@ class Siamese(object):
 
     def train(self, csv, img_dir, meta_dir, epochs=10, batch_size=10, learning_rate=0.001, margin=0.5):
         self.model.summary()
-        self.model.compile(optimizer=Adam(learning_rate), loss=triplet_loss(margin, self.strategy))
+        #self.model.compile(optimizer=Adam(learning_rate), loss=triplet_loss(margin, self.strategy))
+        self.model.compile(optimizer=Adam(learning_rate), loss=soft_margin_triplet_loss)
 
         whales_data = self._read_csv(csv, write_mappings=True)
         whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data[:, 0], y_set=whales_data[:, 1], batch_size=batch_size)

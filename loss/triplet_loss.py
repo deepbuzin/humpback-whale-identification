@@ -128,3 +128,26 @@ def triplet_loss(margin=0.2, strategy='batch_all', metric=euclidean_distance):
     else:
         raise ValueError('unknown strategy: %s' % strategy)
 
+
+def euclidean_dist(embeddings):
+    prod = tf.matmul(embeddings, tf.transpose(embeddings))
+    #sq_norms = tf.reduce_sum(tf.square(embeddings), axis=1)
+    sq_norms = tf.diag_part(prod)
+    dist = tf.reshape(sq_norms, (-1, 1)) - 2 * prod + tf.reshape(sq_norms, (1, -1))
+    return dist
+
+
+def soft_margin_triplet_loss(labels, embeddings):
+    inf = tf.constant(1e+9, tf.float32)
+    epsilon = tf.constant(1e-6, tf.float32)
+    null = tf.constant(0, tf.float32)
+
+    dist = tf.sqrt(tf.maximum(null, epsilon + euclidean_dist(embeddings)))
+    # mask matrix showing equal labels of embeddings
+    equal_label_mask = tf.cast(tf.equal(tf.reshape(labels, (-1, 1)), tf.reshape(labels, (1, -1))), tf.float32)
+
+    pos_dist = tf.reduce_max(equal_label_mask * dist, axis=1)
+    neg_dist = tf.reduce_min((equal_label_mask * inf) + dist, axis=1)
+
+    loss = tf.reduce_mean(tf.nn.softplus(pos_dist - neg_dist))
+    return loss

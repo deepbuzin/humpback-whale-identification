@@ -4,13 +4,16 @@ from __future__ import print_function
 
 import numpy as np
 from keras.utils import Sequence
+from sklearn.utils import shuffle
 
 from .preprocessing import fetch, resize, pad
 
 
 class WhalesSequence(Sequence):
     def __init__(self, img_dir, input_shape, x_set, y_set=None, batch_size=16):
-        self.x, self.y = x_set, y_set
+        if y_set is not None:
+            self.x, self.y = shuffle(x_set, y_set, random_state=666)
+        #self.x, self.y = x_set, y_set
         self.img_dir = img_dir
         self.input_shape = input_shape
         self.batch_size = batch_size
@@ -36,5 +39,6 @@ class WhalesSequence(Sequence):
         img = pad(img, (self.input_shape[1], self.input_shape[0]))
         return img
 
-
+    def on_epoch_end(self):
+        self.x, self.y = shuffle(self.x, self.y, random_state=666)
 

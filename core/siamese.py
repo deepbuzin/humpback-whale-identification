@@ -96,7 +96,7 @@ class Siamese(object):
         self.model.save(os.path.join(self.cache_dir, 'final_model.h5'))
         self.save_weights(os.path.join(self.cache_dir, 'final_weights.h5'))
 
-    def make_embeddings(self, csv, img_dir, batch_size=10):
+    def make_embeddings(self, img_dir, csv, batch_size=10):
         whales_data = self._read_csv(csv)
         whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data[:, 0], batch_size=batch_size)
         pred = self.model.predict_generator(whales, verbose=1)
@@ -105,18 +105,19 @@ class Siamese(object):
         pred_df = pd.DataFrame(data=pred)
         pred_df = pd.concat([pred_df, whales_df], axis=1)
         pred_df = pred_df.drop(['Image'], axis=1)
-        pred_df = pred_df.groupby(['Id']).mean().reset_index()
+        #pred_df = pred_df.groupby(['Id']).mean().reset_index()
         self.embeddings = pred_df.sort_values(by=['Id'])
         self.save_embeddings(os.path.join(self.cache_dir, 'embeddings.pkl'))
 
-    def predict(self, img_dir):
+    def predict(self, img_dir, csv=''):
         assert self.embeddings is not None
-        whales_data = np.array(os.listdir(img_dir))
+        whales_data = np.array(os.listdir(img_dir)) if (csv == '') else self._read_csv(csv)[:, 0]
         whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data, batch_size=1)
         whales = self.model.predict_generator(whales_seq, verbose=1)
 
         np.save(os.path.join(self.cache_dir, 'debug', 'raw_predictions'), whales)
 
+        ids = self.embeddings['Id']
         embeddings = self.embeddings.drop(['Id'], axis=1)
         concat = np.concatenate((embeddings, whales), axis=0)
         prod = np.dot(concat, np.transpose(concat))
@@ -126,7 +127,22 @@ class Siamese(object):
         dist = np.maximum(dist, 0.0)
         dist = dist[self.embeddings.shape[0]:, :self.embeddings.shape[0]]
 
-        predictions = np.apply_along_axis(np.argpartition, 1, dist, 4)
+        # get array showing for each class where started it's embeddings
+        last_id, starts = ids[0], [0]
+        for ind, curr_id in enumerate(ids):
+            if last_id != curr_id:
+                starts.append(ind)
+                last_id = curr_id
+        starts.append(len(ids))
+
+        # get 2D array showing mean dist between val embedding and embeddings of group
+        mean_dist = np.empty((dist.shape[0], len(starts) - 1), dtype=float)
+        for i in range(1, len(starts)):
+            start, end = starts[i - 1], starts[i]
+            group_dist = dist[:, start:end]
+            mean_dist[:, i - 1] = np.mean(group_dist, axis=1)
+
+        predictions = np.apply_along_axis(np.argpartition, 1, mean_dist, 4)
         self.predictions = pd.DataFrame(data=predictions[:, :5])
         self.predictions = pd.concat([pd.DataFrame(data=whales_data), self.predictions], axis=1)
         self.predictions.columns = ['Image'] + list(range(5))

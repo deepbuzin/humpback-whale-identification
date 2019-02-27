@@ -73,24 +73,25 @@ class Siamese(object):
     def get_vis_data(meta_dir):
         names = os.listdir(os.path.join(meta_dir, 'img'))
         imgs = [cv2.cvtColor(cv2.imread(os.path.join(meta_dir, 'img', name)), cv2.COLOR_BGR2RGB) for name in names]
-        return np.array(imgs).reshape((-1, 28, 28, 3))
+        return np.array(imgs).reshape((-1, 672, 896, 3))
 
     def train(self, csv, img_dir, meta_dir, epochs=10, batch_size=10, learning_rate=0.001, margin=0.5):
         self.model.summary()
-        #self.model.compile(optimizer=Adam(learning_rate), loss=triplet_loss(margin, self.strategy))
+        # self.model.compile(optimizer=Adam(learning_rate), loss=triplet_loss(margin, self.strategy))
         self.model.compile(optimizer=Adam(learning_rate), loss=soft_margin_triplet_loss)
 
-        whales_data = self._read_csv(csv, write_mappings=True)
+        whales_data = self._read_csv(csv, mappings_filename=os.path.join(meta_dir, 'whales_to_idx_mapping.npy'))
         whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data[:, 0], y_set=whales_data[:, 1], batch_size=batch_size)
         self.model.fit_generator(whales,
+                                 shuffle=True,
                                  epochs=epochs,
                                  callbacks=[ModelCheckpoint(filepath=os.path.join(self.cache_dir, 'training', 'checkpoint-{epoch:02d}.h5'), save_weights_only=True),
                                             TensorBoard(update_freq='epoch',
-                                                        embeddings_freq=1,
-                                                        embeddings_data=self.get_vis_data(meta_dir),
-                                                        embeddings_metadata=os.path.join(meta_dir, 'metadata.tsv'),
-                                                        embeddings_sprite=os.path.join(meta_dir, 'sprite.png'),
-                                                        embeddings_sprite_single_image_size=(28, 28),  # TODO fix for whales
+                                                        # embeddings_freq=1,
+                                                        # embeddings_data=self.get_vis_data(meta_dir),
+                                                        # embeddings_metadata=os.path.join(meta_dir, 'metadata.tsv'),
+                                                        # embeddings_sprite=os.path.join(meta_dir, 'sprite.png'),
+                                                        # embeddings_sprite_single_image_size=(50, 50),
                                                         embeddings_layer_names=['embeddings'],
                                                         log_dir=os.path.join(self.cache_dir, 'tensorboard_logs'))])
         self.model.save(os.path.join(self.cache_dir, 'final_model.h5'))
@@ -172,18 +173,21 @@ class Siamese(object):
     def load_state(self, filename):
         pass
 
-    def _read_csv(self, csv, write_mappings=False):
+    def _read_csv(self, csv, write_mappings=False, mappings_filename=None):
         csv_data = pd.read_csv(csv)
         whales = np.sort(csv_data['Id'].unique())
-        mapping = {}
-        reverse_mapping = {}
-        for i, w in enumerate(whales):
-            mapping[w] = i
-            reverse_mapping[i] = [w]
+        if mappings_filename is not None:
+            mapping = np.load(mappings_filename).item()
+        else:
+            mapping = {}
+            reverse_mapping = {}
+            for i, w in enumerate(whales):
+                mapping[w] = i
+                reverse_mapping[i] = [w]
+            if write_mappings:
+                np.save(os.path.join(self.cache_dir, 'whales_to_idx_mapping'), mapping)
+                np.save(os.path.join(self.cache_dir, 'idx_to_whales_mapping'), reverse_mapping)
         data = csv_data.replace({'Id': mapping})
-        if write_mappings:
-            np.save(os.path.join(self.cache_dir, 'whales_to_idx_mapping'), mapping)
-            np.save(os.path.join(self.cache_dir, 'idx_to_whales_mapping'), reverse_mapping)
         return data.values
 
     @staticmethod
@@ -199,7 +203,8 @@ class Siamese(object):
         for k in mapping:
             mapping[k] = mapping[k][0]
         predictions = self.predictions.replace({0: mapping, 1: mapping, 2: mapping, 3: mapping, 4: mapping})
-        predictions['Id'] = predictions[0] + ' ' + predictions[1] + ' ' + predictions[2] + ' ' + predictions[3] + ' ' + predictions[4]
+        print(predictions)
+        predictions['Id'] = predictions[0].astype('str') + ' ' + predictions[1].astype('str') + ' ' + predictions[2].astype('str') + ' ' + predictions[3].astype('str') + ' ' + predictions[4].astype('str')
         predictions.to_csv(os.path.join(self.cache_dir, 'submission.csv'), index=False, columns=['Image', 'Id'])
 
     def make_csv(self, mapping_file):

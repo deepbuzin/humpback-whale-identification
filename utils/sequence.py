@@ -14,8 +14,8 @@ class WhalesSequence(Sequence):
         if y_set is not None:
             self.x, self.y = shuffle(x_set, y_set, random_state=666)
         else:
-            self.x, self.y = x_set, y_set
-
+            self.x, self.y = x_set, None
+            
         self.img_dir = img_dir
         self.input_shape = input_shape
         self.batch_size = batch_size

@@ -15,6 +15,7 @@ class WhalesSequence(Sequence):
             self.x, self.y = shuffle(x_set, y_set, random_state=666)
         else:
             self.x, self.y = x_set, None
+            
         self.img_dir = img_dir
         self.input_shape = input_shape
         self.batch_size = batch_size
@@ -41,5 +42,6 @@ class WhalesSequence(Sequence):
         return img
 
     def on_epoch_end(self):
-        self.x, self.y = shuffle(self.x, self.y, random_state=666)
+        if self.y is not None:
+            self.x, self.y = shuffle(self.x, self.y, random_state=666)
 

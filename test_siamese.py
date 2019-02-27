@@ -7,7 +7,7 @@ from core.siamese import Siamese
 def test_embeddings():
     model = Siamese('dummy', input_shape=(6, 8, 3), embedding_size=3)
 
-    model.make_embeddings('data_tiny/train.csv', 'data_tiny/train', batch_size=1)
+    model.make_embeddings('data_tiny/train', 'data_tiny/train.csv', batch_size=1)
     emb = pd.read_pickle(os.path.join(model.cache_dir, 'embeddings.pkl'))
     print(emb)
 

@@ -75,7 +75,7 @@ class Siamese(object):
         imgs = [cv2.cvtColor(cv2.imread(os.path.join(meta_dir, 'img', name)), cv2.COLOR_BGR2RGB) for name in names]
         return np.array(imgs).reshape((-1, 672, 896, 3))
 
-    def train(self, csv, img_dir, meta_dir, epochs=10, batch_size=10, learning_rate=0.001, margin=0.5):
+    def train(self, img_dir, csv, meta_dir, epochs=10, batch_size=10, learning_rate=0.001, margin=0.5):
         self.model.summary()
         # self.model.compile(optimizer=Adam(learning_rate), loss=triplet_loss(margin, self.strategy))
         self.model.compile(optimizer=Adam(learning_rate), loss=soft_margin_triplet_loss)
@@ -112,7 +112,7 @@ class Siamese(object):
 
     def predict(self, img_dir, csv=''):
         assert self.embeddings is not None
-        whales_data = np.array(os.listdir(img_dir)) if (csv == '') else self._read_csv(csv)[:, 0]
+        whales_data = np.array(os.listdir(img_dir)) if csv == '' else pd.read_csv(csv)['Id'].values
         whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data, batch_size=1)
         whales = self.model.predict_generator(whales_seq, verbose=1)
 
@@ -175,12 +175,12 @@ class Siamese(object):
 
     def _read_csv(self, csv, write_mappings=False, mappings_filename=None):
         csv_data = pd.read_csv(csv)
-        whales = np.sort(csv_data['Id'].unique())
         if mappings_filename is not None:
             mapping = np.load(mappings_filename).item()
         else:
             mapping = {}
             reverse_mapping = {}
+            whales = np.sort(csv_data['Id'].unique())
             for i, w in enumerate(whales):
                 mapping[w] = i
                 reverse_mapping[i] = [w]

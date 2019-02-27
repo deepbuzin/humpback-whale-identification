@@ -117,17 +117,8 @@ class Siamese(object):
 
         np.save(os.path.join(self.cache_dir, 'debug', 'raw_predictions'), whales)
 
-        ids = self.embeddings['Id']
-        embeddings = self.embeddings.drop(['Id'], axis=1)
-        concat = np.concatenate((embeddings, whales), axis=0)
-        prod = np.dot(concat, np.transpose(concat))
-        sq_norms = np.reshape(np.diag(prod), (-1, 1))
-
-        dist = sq_norms - 2.0 * prod + np.transpose(sq_norms)
-        dist = np.maximum(dist, 0.0)
-        dist = dist[self.embeddings.shape[0]:, :self.embeddings.shape[0]]
-
         # get array showing for each class where started it's embeddings
+        ids = self.embeddings['Id']
         last_id, starts = ids[0], [0]
         for ind, curr_id in enumerate(ids):
             if last_id != curr_id:
@@ -136,11 +127,20 @@ class Siamese(object):
         starts.append(len(ids))
 
         # get 2D array showing mean dist between val embedding and embeddings of group
-        mean_dist = np.empty((dist.shape[0], len(starts) - 1), dtype=float)
+        embeddings = self.embeddings.drop(['Id'], axis=1)
+        mean_dist = np.empty((whales.shape[0], len(starts) - 1), dtype=float)
         for i in range(1, len(starts)):
-            start, end = starts[i - 1], starts[i]
-            group_dist = dist[:, start:end]
-            mean_dist[:, i - 1] = np.mean(group_dist, axis=1)
+            group_embeddings = embeddings[starts[i - 1]:starts[i]]
+
+            concat = np.concatenate((group_embeddings, whales), axis=0)
+            prod = np.dot(concat, np.transpose(concat))
+            sq_norms = np.reshape(np.diag(prod), (-1, 1))
+
+            dist = sq_norms - 2.0 * prod + np.transpose(sq_norms)
+            dist = np.maximum(dist, 0.0)
+            dist = dist[group_embeddings.shape[0]:, :group_embeddings.shape[0]]
+
+            mean_dist[:, i - 1] = np.mean(dist, axis=1)
 
         predictions = np.apply_along_axis(np.argpartition, 1, mean_dist, 4)
         self.predictions = pd.DataFrame(data=predictions[:, :5])

@@ -83,7 +83,7 @@ class Siamese(object):
         whales_data = self._read_csv(csv, mappings_filename=os.path.join(meta_dir, 'whales_to_idx_mapping.npy'))
         whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data[:, 0], y_set=whales_data[:, 1], batch_size=batch_size)
         self.model.fit_generator(whales,
-                                 shuffle=True,
+                                 shuffle=False,
                                  epochs=epochs,
                                  callbacks=[ModelCheckpoint(filepath=os.path.join(self.cache_dir, 'training', 'checkpoint-{epoch:02d}.h5'), save_weights_only=True),
                                             TensorBoard(update_freq='epoch',

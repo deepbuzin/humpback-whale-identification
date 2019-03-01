@@ -140,9 +140,9 @@ def euclidean_dist(embeddings):
 def soft_margin_triplet_loss(labels, embeddings):
     inf = tf.constant(1e+9, tf.float32)
     epsilon = tf.constant(1e-6, tf.float32)
-    null = tf.constant(0, tf.float32)
+    zero = tf.constant(0, tf.float32)
 
-    dist = tf.sqrt(tf.maximum(null, epsilon + euclidean_dist(embeddings)))
+    dist = tf.sqrt(tf.maximum(zero, epsilon + euclidean_dist(embeddings)))
     # mask matrix showing equal labels of embeddings
     equal_label_mask = tf.cast(tf.equal(tf.reshape(labels, (-1, 1)), tf.reshape(labels, (1, -1))), tf.float32)
 

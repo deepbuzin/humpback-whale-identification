@@ -14,8 +14,8 @@ class WhalesSequence(Sequence):
     def __init__(self, img_dir, input_shape, x_set, y_set=None, batch_size=16):
         if y_set is not None:
             self.x, self.y = shuffle(x_set, y_set, random_state=666)
-            self.classes, self.classes_count = np.unique(y_set, return_counts=True)
-            self.dataset = pd.DataFrame(data={'x': x_set, 'y': y_set, 'used': np.zeros_like(y_set)})
+            self.classes, self.classes_count = np.unique(self.y, return_counts=True)
+            self.dataset = pd.DataFrame(data={'x': self.x, 'y': self.y, 'used': np.zeros_like(self.y)})
             self.dataset['class_count'] = self.dataset.groupby('y')['y'].transform('count')
         else:
             self.x, self.y = x_set, None

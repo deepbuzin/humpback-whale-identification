@@ -81,7 +81,8 @@ class Siamese(object):
         self.model.compile(optimizer=Adam(learning_rate), loss=soft_margin_triplet_loss)
 
         whales_data = self._read_csv(csv, mappings_filename=os.path.join(meta_dir, 'whales_to_idx_mapping.npy'))
-        whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data[:, 0], y_set=whales_data[:, 1], batch_size=batch_size)
+        img_names, labels = whales_data[:, 0], self.new_whale_to_fictive_labels(whales_data[:, 1])
+        whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=img_names, y_set=labels, batch_size=batch_size)
         self.model.fit_generator(whales,
                                  shuffle=False,
                                  epochs=epochs,
@@ -96,6 +97,44 @@ class Siamese(object):
                                                         log_dir=os.path.join(self.cache_dir, 'tensorboard_logs'))])
         self.model.save(os.path.join(self.cache_dir, 'final_model.h5'))
         self.save_weights(os.path.join(self.cache_dir, 'final_weights.h5'))
+
+    #old (no voting)
+    def make_embeddings_(self, img_dir, csv, batch_size=10):
+        whales_data = self._read_csv(csv)
+        whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data[:, 0], batch_size=batch_size)
+        pred = self.model.predict_generator(whales, verbose=1)
+
+        whales_df = pd.DataFrame(data=whales_data, columns=['Image', 'Id'])
+        pred_df = pd.DataFrame(data=pred)
+        pred_df = pd.concat([pred_df, whales_df], axis=1)
+        pred_df = pred_df.drop(['Image'], axis=1)
+        pred_df = pred_df.groupby(['Id']).mean().reset_index()
+        self.embeddings = pred_df.sort_values(by=['Id'])
+        self.save_embeddings(os.path.join(self.cache_dir, 'embeddings.pkl'))
+
+    #old (no voting)
+    def predict_(self, img_dir):
+        assert self.embeddings is not None
+        img_names = np.array(os.listdir(img_dir))
+        whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=img_names, batch_size=1)
+        whales = self.model.predict_generator(whales_seq, verbose=1)
+
+        np.save(os.path.join(self.cache_dir, 'debug', 'raw_predictions'), whales)
+
+        embeddings = self.embeddings.drop(['Id'], axis=1)
+        concat = np.concatenate((embeddings, whales), axis=0)
+        prod = np.dot(concat, np.transpose(concat))
+        sq_norms = np.reshape(np.diag(prod), (-1, 1))
+
+        dist = sq_norms - 2.0 * prod + np.transpose(sq_norms)
+        dist = np.maximum(dist, 0.0)
+        dist = dist[self.embeddings.shape[0]:, :self.embeddings.shape[0]]
+
+        predictions = np.apply_along_axis(np.argpartition, 1, dist, 4)
+        self.predictions = pd.DataFrame(data=predictions[:, :5])
+        self.predictions = pd.concat([pd.DataFrame(data=img_names), self.predictions], axis=1)
+        self.predictions.columns = ['Image'] + list(range(5))
+        self.save_predictions(os.path.join(self.cache_dir, 'predictions.pkl'))
 
     def make_embeddings(self, img_dir, csv, batch_size=10):
         whales_data = self._read_csv(csv)
@@ -112,14 +151,15 @@ class Siamese(object):
 
     def predict(self, img_dir, csv=''):
         assert self.embeddings is not None
-        whales_data = np.array(os.listdir(img_dir)) if csv == '' else pd.read_csv(csv)['Id'].values
-        whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data, batch_size=1)
+        img_names = np.array(os.listdir(img_dir)) if csv == '' else pd.read_csv(csv)['Image'].values
+        whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=img_names, batch_size=1)
         whales = self.model.predict_generator(whales_seq, verbose=1)
 
         np.save(os.path.join(self.cache_dir, 'debug', 'raw_predictions'), whales)
+        #whales = np.load('trained/raw_predictions.npy')
 
         # get array showing for each class where started it's embeddings
-        ids = self.embeddings['Id']
+        ids = self.embeddings['Id'].values
         last_id, starts = ids[0], [0]
         for ind, curr_id in enumerate(ids):
             if last_id != curr_id:
@@ -128,9 +168,10 @@ class Siamese(object):
         starts.append(len(ids))
 
         # get 2D array showing mean dist between val embedding and embeddings of group
-        embeddings = self.embeddings.drop(['Id'], axis=1)
+        embeddings = self.embeddings.drop(['Id'], axis=1).values
         mean_dist = np.empty((whales.shape[0], len(starts) - 1), dtype=float)
         for i in range(1, len(starts)):
+            print("Computing distance matrix for prediction: {}/{}".format(i, len(starts) - 1))
             group_embeddings = embeddings[starts[i - 1]:starts[i]]
 
             concat = np.concatenate((group_embeddings, whales), axis=0)
@@ -145,7 +186,7 @@ class Siamese(object):
 
         predictions = np.apply_along_axis(np.argpartition, 1, mean_dist, 4)
         self.predictions = pd.DataFrame(data=predictions[:, :5])
-        self.predictions = pd.concat([pd.DataFrame(data=whales_data), self.predictions], axis=1)
+        self.predictions = pd.concat([pd.DataFrame(data=img_names), self.predictions], axis=1)
         self.predictions.columns = ['Image'] + list(range(5))
         self.save_predictions(os.path.join(self.cache_dir, 'predictions.pkl'))
 
@@ -190,6 +231,12 @@ class Siamese(object):
         data = csv_data.replace({'Id': mapping})
         return data.values
 
+    def new_whale_to_fictive_labels(self, labels):
+        new_whale_idxs = np.where(labels == 0)[0]
+        fictive_labels = -np.arange(1, len(new_whale_idxs) + 1)
+        labels[new_whale_idxs] = fictive_labels
+        return labels
+
     @staticmethod
     def draw_tsne(vectors):
         tsne = TSNE(n_components=3, verbose=1, n_iter=300, perplexity=50).fit_transform(vectors)
@@ -203,7 +250,7 @@ class Siamese(object):
         for k in mapping:
             mapping[k] = mapping[k][0]
         predictions = self.predictions.replace({0: mapping, 1: mapping, 2: mapping, 3: mapping, 4: mapping})
-        print(predictions)
+        #print(predictions)
         predictions['Id'] = predictions[0].astype('str') + ' ' + predictions[1].astype('str') + ' ' + predictions[2].astype('str') + ' ' + predictions[3].astype('str') + ' ' + predictions[4].astype('str')
         predictions.to_csv(os.path.join(self.cache_dir, 'submission.csv'), index=False, columns=['Image', 'Id'])
 

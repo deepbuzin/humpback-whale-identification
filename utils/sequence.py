@@ -55,7 +55,7 @@ class WhalesSequence(Sequence):
     def preprocess(self, img):
         assert len(img.shape) == 3
         h, w, _ = img.shape
-        if h / w <= 0.75:
+        if h / w <= self.input_shape[0] / self.input_shape[1]:
             img = resize(img, (self.input_shape[1], int(self.input_shape[1] * h / w)))
         else:
             img = resize(img, (int(self.input_shape[0] * w / h), self.input_shape[0]))

@@ -133,8 +133,6 @@ def euclidean_dist(embeddings):
     #sq_norms = tf.reduce_sum(tf.square(embeddings), axis=1)
     sq_norms = tf.diag_part(prod)
     dist = tf.reshape(sq_norms, (-1, 1)) - 2 * prod + tf.reshape(sq_norms, (1, -1))
-
-    dist = tf.reduce_prod(dist, dist)
     return dist
 
 

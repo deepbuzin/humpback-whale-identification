@@ -9,7 +9,6 @@ from sklearn.utils import shuffle
 
 from .preprocessing import fetch, resize, pad
 
-
 class WhalesSequence(Sequence):
     def __init__(self, img_dir, input_shape, x_set, y_set=None, batch_size=16):
         if y_set is not None:
@@ -60,7 +59,8 @@ class WhalesSequence(Sequence):
         else:
             img = resize(img, (int(self.input_shape[0] * w / h), self.input_shape[0]))
         img = pad(img, (self.input_shape[1], self.input_shape[0]))
-        return img
+        return img / 255.  # pixel normalization
+        #return img
 
     def on_epoch_end(self):
         if self.y is not None:

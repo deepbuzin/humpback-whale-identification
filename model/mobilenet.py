@@ -7,6 +7,9 @@ from keras.layers import Input, ZeroPadding2D, ReLU, GlobalAveragePooling2D, Glo
 from keras.initializers import glorot_uniform
 from keras.models import Model
 
+import keras.backend as K #tmp?
+from keras.layers import Lambda #tmp?
+
 
 def separable(x, filters_pw, block_num, strides=(1, 1), trainable=True):
     if strides != (1, 1):
@@ -110,6 +113,8 @@ def mobilenet_like(input_shape=(672, 896, 3), embedding_size=128, train_hidden_l
     x = Conv2D(embedding_size, (1, 1), padding='same', name='conv_emb_2')(x)
 
     x = Reshape((embedding_size,), name='embeddings')(x)
+
+    x = Lambda(lambda x: K.l2_normalize(x))(x)  # tmp?
 
     model = Model(inputs=img, outputs=x)
     return model

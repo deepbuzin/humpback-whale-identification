@@ -14,7 +14,7 @@ import shutil
 import json
 from time import strftime, gmtime
 
-from keras.optimizers import Adam
+from keras.optimizers import Adam, SGD, RMSprop, Adagrad
 from keras.callbacks import ModelCheckpoint
 from utils.callbacks import TensorBoard
 from sklearn.manifold import TSNE
@@ -36,7 +36,7 @@ from utils.sequence import WhalesSequence
 
 
 class Siamese(object):
-    def __init__(self, model, strategy='batch_all', input_shape=(384, 512, 3), embedding_size=128):
+    def __init__(self, model, strategy='batch_all', input_shape=(384, 512, 3), embedding_size=128, train_hidden_layers=True):
         self.model_name = model
         self.strategy = strategy
         self.input_shape = input_shape
@@ -52,14 +52,15 @@ class Siamese(object):
             os.makedirs(os.path.join(self.cache_dir, 'training'))
         if not os.path.isdir(os.path.join(self.cache_dir, 'debug')):
             os.makedirs(os.path.join(self.cache_dir, 'debug'))
-        self.model = Siamese.build_model(model, input_shape, embedding_size)
+        self.model = Siamese.build_model(model, input_shape, embedding_size, train_hidden_layers)
 
         self.write_config()
 
     @staticmethod
-    def build_model(model_name, input_shape, embedding_size):
+    def build_model(model_name, input_shape, embedding_size, train_hidden_layers):
         if model_name == 'mobilenet_like':
-            return mobilenet_like(input_shape=input_shape, embedding_size=embedding_size, train_hidden_layers=True)
+            return mobilenet_like(input_shape=input_shape, embedding_size=embedding_size,
+                                  train_hidden_layers=train_hidden_layers)
         elif model_name == 'resnet_like_33':
             return resnet_like_33(input_shape=input_shape, embedding_size=embedding_size)
         elif model_name == 'resnet_like_36':
@@ -139,7 +140,7 @@ class Siamese(object):
         dist = dist[embeddings.shape[0]:, :embeddings.shape[0]]
         dist = np.sqrt(np.maximum(dist, 0.0))
 
-        predictions = np.apply_along_axis(np.argpartition, 1, dist, 4) + 1
+        predictions = np.apply_along_axis(np.argpartition, 1, dist, 4) + 1  # +1 to compensate new_whale
         self.predictions = pd.DataFrame(data=predictions[:, :5])
         self.predictions = pd.concat([pd.DataFrame(data=img_names), self.predictions], axis=1)
         self.predictions.columns = ['Image'] + list(range(5))
@@ -163,11 +164,11 @@ class Siamese(object):
     def predict(self, img_dir, csv=''):
         assert self.embeddings is not None
         img_names = np.array(os.listdir(img_dir)) if csv == '' else pd.read_csv(csv)['Image'].values
-        # whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=img_names, batch_size=1)
-        # whales = self.model.predict_generator(whales_seq, verbose=1)
+        whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=img_names, batch_size=1)
+        whales = self.model.predict_generator(whales_seq, verbose=1)
 
-        # np.save(os.path.join(self.cache_dir, 'debug', 'raw_predictions'), whales)
-        whales = np.load('trained/raw_predictions.npy')
+        np.save(os.path.join(self.cache_dir, 'debug', 'raw_predictions'), whales)
+        #whales = np.load('trained/raw_predictions.npy')
 
         embeddings = self.embeddings.drop(['Id'], axis=1)
         dist = distance.cdist(whales, embeddings, 'euclidean')
@@ -189,7 +190,7 @@ class Siamese(object):
         for i in range(len(starts) - 1):
             mean_dist[:, class_offset + i] = np.mean(dist[:, starts[i]:starts[i + 1]], axis=1)
 
-        predictions = np.apply_along_axis(np.argpartition, 1, mean_dist, 4) + 1
+        predictions = np.apply_along_axis(np.argpartition, 1, mean_dist, 4)
         self.predictions = pd.DataFrame(data=predictions[:, :5])
         self.predictions = pd.concat([pd.DataFrame(data=img_names), self.predictions], axis=1)
         self.predictions.columns = ['Image'] + list(range(5))

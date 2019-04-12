@@ -4,7 +4,6 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-
 def euclidean_distance(embeddings):
     """Compute the 2D matrix of pairwise euclidean distances between embeddings.
 
@@ -134,10 +133,14 @@ def euclidean_dist(embeddings):
     #sq_norms = tf.reduce_sum(tf.square(embeddings), axis=1)
     sq_norms = tf.diag_part(prod)
     dist = tf.reshape(sq_norms, (-1, 1)) - 2 * prod + tf.reshape(sq_norms, (1, -1))
+
+    dist = tf.reduce_prod(dist, dist)
     return dist
 
 
 def soft_margin_triplet_loss(labels, embeddings):
+    #embeddings -= tf.reduce_mean(embeddings, axis=0)  # !!!!!!!!!!!!!!!!!!
+
     inf = tf.constant(1e+9, tf.float32)
     epsilon = tf.constant(1e-6, tf.float32)
     zero = tf.constant(0, tf.float32)

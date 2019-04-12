@@ -6,8 +6,10 @@ from keras.layers import Activation, Add, AveragePooling2D, BatchNormalization, 
 from keras.initializers import glorot_uniform
 from keras.models import Model
 
+import keras.backend as K #tmp?
+from keras.layers import Lambda #tmp?
 
-def mnist_5(input_shape=(28, 28, 3), embedding_size=64):
+def mnist_5(input_shape=(28, 28, 3), embedding_size=64, train_hidden_layers=True):
     img = Input(input_shape)
 
     x = Conv2D(32, (3, 3), strides=(2, 2), padding='same', name='conv_1', kernel_initializer=glorot_uniform())(img)
@@ -25,6 +27,8 @@ def mnist_5(input_shape=(28, 28, 3), embedding_size=64):
     x = Flatten()(x)
     x = Dense(64, activation='relu', kernel_initializer=glorot_uniform())(x)
     x = Dense(embedding_size, kernel_initializer=glorot_uniform(), name='embeddings')(x)
+
+    x = Lambda(lambda x: K.l2_normalize(x))(x)  # tmp?
 
     model = Model(inputs=img, outputs=x, name='shallow_mnist')
     model.summary()

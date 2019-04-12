@@ -82,7 +82,7 @@ class Siamese(object):
         self.model.summary()
         # self.model.compile(optimizer=Adam(learning_rate), loss=triplet_loss(margin, self.strategy))
         # self.model.compile(optimizer=Adam(learning_rate), loss=soft_margin_triplet_loss)
-        self.model.compile(optimizer=Adam(learning_rate), loss=tf_contrib_loss(margin=margin))
+        self.model.compile(optimizer=Adam(learning_rate), loss=tf_contrib_loss(margin))
 
         whales_data = self._read_csv(csv, mappings_filename=os.path.join(meta_dir, 'whales_to_idx_mapping.npy'))
         img_names, labels = whales_data[:, 0], self.new_whale_to_fictive_labels(whales_data[:, 1])

@@ -114,7 +114,7 @@ def mobilenet_like(input_shape=(672, 896, 3), embedding_size=128, train_hidden_l
 
     x = Reshape((embedding_size,), name='embeddings')(x)
 
-    x = Lambda(lambda x: K.l2_normalize(x))(x)  # tmp?
+    x = Lambda(lambda x: K.l2_normalize(x, axis=1))(x)  # tmp?
 
     model = Model(inputs=img, outputs=x)
     return model

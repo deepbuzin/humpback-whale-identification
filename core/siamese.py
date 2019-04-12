@@ -24,7 +24,7 @@ from model.mobilenet import mobilenet_like
 from model.resnet import resnet_like_33, resnet_like_36
 from model.shallow import mnist_5
 from model.dummy import dummy
-from loss.triplet_loss import triplet_loss, soft_margin_triplet_loss
+from loss.triplet_loss import triplet_loss, soft_margin_triplet_loss, tf_contrib_loss
 from utils.sequence import WhalesSequence
 
 # import tensorflow as tf
@@ -81,7 +81,8 @@ class Siamese(object):
     def train(self, img_dir, csv, meta_dir, epochs=10, batch_size=10, learning_rate=0.001, margin=0.5):
         self.model.summary()
         # self.model.compile(optimizer=Adam(learning_rate), loss=triplet_loss(margin, self.strategy))
-        self.model.compile(optimizer=Adam(learning_rate), loss=soft_margin_triplet_loss)
+        # self.model.compile(optimizer=Adam(learning_rate), loss=soft_margin_triplet_loss)
+        self.model.compile(optimizer=Adam(learning_rate), loss=tf_contrib_loss(margin=margin))
 
         whales_data = self._read_csv(csv, mappings_filename=os.path.join(meta_dir, 'whales_to_idx_mapping.npy'))
         img_names, labels = whales_data[:, 0], self.new_whale_to_fictive_labels(whales_data[:, 1])
@@ -171,7 +172,7 @@ class Siamese(object):
         #whales = np.load('trained/raw_predictions.npy')
 
         embeddings = self.embeddings.drop(['Id'], axis=1)
-        dist = distance.cdist(whales, embeddings, 'euclidean')
+        dist = distance.cdist(whales, embeddings, 'sqeuclidean')
 
         # get array showing for each class where started it's embeddings
         ids = self.embeddings['Id'].values

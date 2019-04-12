@@ -3,8 +3,8 @@ from __future__ import print_function
 import pandas as pd
 import numpy as np
 
-#val = pd.read_csv('val.csv')
-val = pd.read_csv('train.csv')
+val = pd.read_csv('val.csv')
+#val = pd.read_csv('train.csv')
 true_labels = val["Id"].values
 
 pred = pd.read_pickle('trained/predictions.pkl')

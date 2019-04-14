@@ -2,18 +2,22 @@ from __future__ import print_function
 
 import pandas as pd
 import numpy as np
+from sklearn.neighbors import KNeighborsClassifier
 
 val = pd.read_csv('val.csv')
 #val = pd.read_csv('train.csv')
 true_labels = val["Id"].values
 
-pred = pd.read_pickle('trained/predictions.pkl')
-inds = np.unique(true_labels, return_index=True)[1]
-whale_name = [true_labels[ind] for ind in sorted(inds)]
-whale_id = list(range(1, len(whale_name)+1))
-mapping = dict(zip(whale_id, whale_name))
-pred = pred.replace({0: mapping, 1: mapping, 2: mapping, 3: mapping, 4: mapping})
-pred_labels = pred[0].values
+embeddings = pd.read_pickle('trained/embeddings.pkl')
+labels = embeddings['Id'].values.astype('int')
+embeddings = embeddings.drop(['Id'], axis=1)
+whales = np.load('trained/raw_predictions.npy')
+
+KNN = KNeighborsClassifier(n_neighbors=5, metric='sqeuclidean')
+KNN.fit(embeddings, labels)
+pred = KNN.predict(whales)
+mapping = np.load('../data/meta/idx_to_whales_mapping.npy').item()
+pred_labels = [mapping[x][0] for x in pred]
 
 print('true labels: \n', true_labels)
 print('pred labels: \n', pred_labels)

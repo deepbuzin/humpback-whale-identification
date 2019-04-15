@@ -12,8 +12,9 @@ from .preprocessing import fetch, resize, pad
 class WhalesSequence(Sequence):
     def __init__(self, img_dir, input_shape, x_set, y_set=None, batch_size=16):
         if y_set is not None:
-            self.x, self.y = shuffle(x_set, y_set, random_state=666)
-            self.classes, self.classes_count = np.unique(self.y, return_counts=True)
+            self.x, self.y = x_set, y_set
+            #self.x, self.y = shuffle(x_set, y_set, random_state=666)
+            #self.classes, self.classes_count = np.unique(self.y, return_counts=True)
             self.dataset = pd.DataFrame(data={'x': self.x, 'y': self.y, 'used': np.zeros_like(self.y)})
             self.dataset['class_count'] = self.dataset.groupby('y')['y'].transform('count')
         else:
@@ -32,15 +33,18 @@ class WhalesSequence(Sequence):
             return np.array([self.preprocess(fetch(self.img_dir, name)) for name in batch_x])
 
         unused = self.dataset.loc[self.dataset['used'] == 0]
-        if len(unused.loc[self.dataset['class_count'] > 1]) >= 15 and len(unused.loc[self.dataset['class_count'] == 1]) >= 5:
-            good = unused.loc[self.dataset['class_count'] > 1]['y'].sample(n=15)
-            bad = unused.loc[self.dataset['class_count'] == 1]['y'].sample(n=5)
+        single_img = unused.loc[self.dataset['class_count'] == 1]
+        single_img_not = unused.loc[self.dataset['class_count'] > 1]
+        if len(single_img_not) >= 15 and len(single_img) >= 5:
+            good = single_img_not['y'].sample(n=15)
+            bad = single_img['y'].sample(n=5)
             include_classes = pd.concat([good, bad], axis=0).unique()
         else:
             include_classes = unused['y'].unique()
 
-        if len(unused.loc[self.dataset['y'].isin(include_classes)]) >= self.batch_size:
-            batch_indices = unused.loc[(self.dataset['y'].isin(include_classes))].sample(n=self.batch_size).index
+        sample_candidates = unused.loc[self.dataset['y'].isin(include_classes)]
+        if len(sample_candidates) >= self.batch_size:
+            batch_indices = sample_candidates.sample(n=self.batch_size).index
         elif len(unused) >= self.batch_size:
             batch_indices = unused.sample(n=self.batch_size).index
         else:
@@ -64,8 +68,8 @@ class WhalesSequence(Sequence):
 
     def on_epoch_end(self):
         if self.y is not None:
-            self.x, self.y = shuffle(self.x, self.y, random_state=666)
-            self.classes, self.classes_count = np.unique(self.y, return_counts=True)
+            #self.x, self.y = shuffle(self.x, self.y, random_state=666)
+            #self.classes, self.classes_count = np.unique(self.y, return_counts=True)
             self.dataset = pd.DataFrame(data={'x': self.x, 'y': self.y, 'used': np.zeros_like(self.y)})
             self.dataset['class_count'] = self.dataset.groupby('y')['y'].transform('count')
 

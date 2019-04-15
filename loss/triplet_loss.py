@@ -242,7 +242,6 @@ def triplet_loss(margin=1.0, strategy='batch_semi_hard'):
     :param strategy: string, that indicated whether we're using the 'batch hard', 'batch all' or 'batch_semi_hard' mining strategy
     :return: a callback function that calculates the loss according to the specified strategy
     """
-
     def get_loss_tensor(positive_dists, negative_dists):
         """Compute the triplet loss function tensor using specified margin:
 
@@ -301,6 +300,10 @@ def triplet_loss(margin=1.0, strategy='batch_semi_hard'):
 
         loss_mat = get_loss_tensor(dist, semi_hard_negatives)
         loss = tf.truediv(tf.reduce_sum(tf.multiply(loss_mat, mask_positives)), n_positives)
+
+        #if there is no equal label pairs, loss is 0
+        #loss = tf.cond(tf.reduce_any(adjacency), lambda: loss, lambda: tf.constant(0.0))
+        loss = tf.cond(tf.is_nan(loss), lambda: tf.constant(0.0), lambda: loss)
         return loss
 
     def batch_all(labels, embeddings):
@@ -321,6 +324,8 @@ def triplet_loss(margin=1.0, strategy='batch_semi_hard'):
 
         num_non_easy_triplets = tf.reduce_sum(tf.to_float(tf.greater(loss_tensor, 1e-16)))
         loss = tf.reduce_sum(loss_tensor) / (num_non_easy_triplets + 1e-16)
+
+        loss = tf.cond(tf.is_nan(loss), lambda: tf.constant(0.0), lambda: loss)
         return loss
 
     def batch_hard(labels, embeddings):
@@ -342,6 +347,8 @@ def triplet_loss(margin=1.0, strategy='batch_semi_hard'):
 
         num_non_easy_triplets = tf.reduce_sum(tf.to_float(tf.greater(loss_mat, 1e-16)))
         loss = tf.reduce_sum(loss_mat) / (num_non_easy_triplets + 1e-16)
+
+        loss = tf.cond(tf.is_nan(loss), lambda: tf.constant(0.0), lambda: loss)
         return loss
 
     if strategy == 'batch_semi_hard':

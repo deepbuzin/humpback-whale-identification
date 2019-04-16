@@ -5,7 +5,7 @@ from __future__ import print_function
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+# from mpl_toolkits.mplot3d import Axes3D
 import cv2
 
 import sys  # tmp
@@ -16,9 +16,11 @@ from time import strftime, gmtime
 
 from keras.optimizers import Adam, SGD, RMSprop, Adagrad
 from keras.callbacks import ModelCheckpoint
-from utils.callbacks import TensorBoard
-from sklearn.manifold import TSNE
+from utils.callbacks import TensorBoard, Callback
+from tensorflow.python.keras.utils.generic_utils import Progbar
+# from sklearn.manifold import TSNE
 from scipy.spatial import distance
+from sklearn.neighbors import KNeighborsClassifier
 
 from model.mobilenet import mobilenet_like
 from model.resnet import resnet_like_33, resnet_like_36
@@ -34,6 +36,49 @@ from utils.sequence import WhalesSequence
 # config.gpu_options.per_process_gpu_memory_fraction = 0.5
 # set_session(tf.Session(config=config))
 
+class ProgbarLossLogger(Callback):
+  def __init__(self, count_mode='samples', stateful_metrics=None):
+    super(ProgbarLossLogger, self).__init__()
+    self.stateful_metrics = set(stateful_metrics or [])
+
+  def on_train_begin(self, logs=None):
+    self.epochs = self.params['epochs']
+
+  def on_epoch_begin(self, epoch, logs=None):
+    self.seen = 0
+    self.target = self.params['steps']
+
+    if self.epochs > 1:
+      print('Epoch %d/%d' % (epoch + 1, self.epochs))
+    self.progbar = Progbar(target=self.target, verbose=True, stateful_metrics=['loss'])
+
+  def on_batch_begin(self, batch, logs=None):
+    if self.seen < self.target:
+      self.log_values = []
+
+  def on_batch_end(self, batch, logs=None):
+    logs = logs or {}
+    batch_size = logs.get('size', 0)
+    # In case of distribution strategy we can potentially run multiple steps
+    # at the same time, we should account for that in the `seen` calculation.
+    num_steps = logs.get('num_steps', 1)
+    self.seen += num_steps
+
+    for k in self.params['metrics']:
+      if k in logs:
+        self.log_values.append((k, logs[k]))
+
+    # Skip progbar update for the last batch;
+    # will be handled by on_epoch_end.
+    if self.seen < self.target:
+      self.progbar.update(self.seen, self.log_values)
+
+  def on_epoch_end(self, epoch, logs=None):
+    logs = logs or {}
+    for k in self.params['metrics']:
+      if k in logs:
+        self.log_values.append((k, logs[k]))
+    self.progbar.update(self.seen, self.log_values)
 
 class Siamese(object):
     def __init__(self, model, strategy='batch_semi_hard', input_shape=(384, 512, 3), embedding_size=128, train_hidden_layers=True):
@@ -88,7 +133,9 @@ class Siamese(object):
         self.model.fit_generator(whales,
                                  shuffle=False,
                                  epochs=epochs,
+                                 verbose=0,
                                  callbacks=[ModelCheckpoint(filepath=os.path.join(self.cache_dir, 'training', 'checkpoint-{epoch:02d}.h5'), save_weights_only=True),
+                                            ProgbarLossLogger(),
                                             TensorBoard(update_freq='epoch',
                                                         # embeddings_freq=1,
                                                         # embeddings_data=self.get_vis_data(meta_dir),
@@ -139,7 +186,7 @@ class Siamese(object):
         dist = dist[embeddings.shape[0]:, :embeddings.shape[0]]
         dist = np.sqrt(np.maximum(dist, 0.0))
 
-        predictions = np.apply_along_axis(np.argpartition, 1, dist, 4) + 1  # +1 to compensate new_whale
+        predictions = np.apply_along_axis(np.argpartition, 1, -dist, 4) + 1  # +1 to compensate new_whale
         self.predictions = pd.DataFrame(data=predictions[:, :5])
         self.predictions = pd.concat([pd.DataFrame(data=img_names), self.predictions], axis=1)
         self.predictions.columns = ['Image'] + list(range(5))
@@ -159,8 +206,30 @@ class Siamese(object):
         self.embeddings = pred_df.sort_values(by=['Id'])
         self.save_embeddings(os.path.join(self.cache_dir, 'embeddings.pkl'))
 
-    #using scipy
     def predict(self, img_dir, csv=''):
+        assert self.embeddings is not None
+        img_names = np.array(os.listdir(img_dir)) if csv == '' else pd.read_csv(csv)['Image'].values
+        whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=img_names, batch_size=1)
+        whales = self.model.predict_generator(whales_seq, verbose=1)
+
+        np.save(os.path.join(self.cache_dir, 'debug', 'raw_predictions'), whales)
+        #whales = np.load('trained/raw_predictions.npy')
+
+        ids = self.embeddings['Id'].values
+        embeddings = self.embeddings.drop(['Id'], axis=1)
+
+        KNN = KNeighborsClassifier(n_neighbors=16, metric='sqeuclidean')
+        KNN.fit(embeddings, ids)
+
+        pred = KNN.predict_proba(whales)
+        predictions = np.apply_along_axis(np.argpartition, 1, -pred, 4) + 1 # +1 to compensate new_whale
+        self.predictions = pd.DataFrame(data=predictions[:, :5])
+        self.predictions = pd.concat([pd.DataFrame(data=img_names), self.predictions], axis=1)
+        self.predictions.columns = ['Image'] + list(range(5))
+        self.save_predictions(os.path.join(self.cache_dir, 'predictions.pkl'))
+
+    #using scipy
+    def predict_scipy(self, img_dir, csv=''):
         assert self.embeddings is not None
         img_names = np.array(os.listdir(img_dir)) if csv == '' else pd.read_csv(csv)['Image'].values
         whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=img_names, batch_size=1)
@@ -189,7 +258,7 @@ class Siamese(object):
         for i in range(len(starts) - 1):
             mean_dist[:, class_offset + i] = np.mean(dist[:, starts[i]:starts[i + 1]], axis=1)
 
-        predictions = np.apply_along_axis(np.argpartition, 1, mean_dist, 4)
+        predictions = np.apply_along_axis(np.argpartition, 1, -mean_dist, 4)
         self.predictions = pd.DataFrame(data=predictions[:, :5])
         self.predictions = pd.concat([pd.DataFrame(data=img_names), self.predictions], axis=1)
         self.predictions.columns = ['Image'] + list(range(5))
@@ -246,7 +315,7 @@ class Siamese(object):
             class_offset += len(starts) - 1
             embeddings_offset += len(curr_embeddings)
 
-        predictions = np.apply_along_axis(np.argpartition, 1, mean_dist, 4)
+        predictions = np.apply_along_axis(np.argpartition, 1, -mean_dist, 4)
         self.predictions = pd.DataFrame(data=predictions[:, :5])
         self.predictions = pd.concat([pd.DataFrame(data=img_names), self.predictions], axis=1)
         self.predictions.columns = ['Image'] + list(range(5))
@@ -291,6 +360,9 @@ class Siamese(object):
                 np.save(os.path.join(self.cache_dir, 'whales_to_idx_mapping'), mapping)
                 np.save(os.path.join(self.cache_dir, 'idx_to_whales_mapping'), reverse_mapping)
         data = csv_data.replace({'Id': mapping})
+
+        # data = data.sample(n=1000) #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
         return data.values
 
     def new_whale_to_fictive_labels(self, labels):
@@ -299,13 +371,13 @@ class Siamese(object):
         labels[new_whale_idxs] = fictive_labels
         return labels
 
-    @staticmethod
-    def draw_tsne(vectors):
-        tsne = TSNE(n_components=3, verbose=1, n_iter=300, perplexity=50).fit_transform(vectors)
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(tsne[:, 0], tsne[:, 1], tsne[:, 2])
-        plt.show()
+    # @staticmethod
+    # def draw_tsne(vectors):
+    #     tsne = TSNE(n_components=3, verbose=1, n_iter=300, perplexity=50).fit_transform(vectors)
+    #     fig = plt.figure()
+    #     ax = fig.add_subplot(111, projection='3d')
+    #     ax.scatter(tsne[:, 0], tsne[:, 1], tsne[:, 2])
+    #     plt.show()
 
     def make_kaggle_csv(self, mapping_file):
         mapping = np.load(mapping_file).item()

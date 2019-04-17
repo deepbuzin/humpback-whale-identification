@@ -5,7 +5,8 @@ from __future__ import print_function
 import numpy as np
 import pandas as pd
 from keras.utils import Sequence
-from sklearn.utils import shuffle
+from keras.preprocessing.image import ImageDataGenerator
+# from sklearn.utils import shuffle
 
 from .preprocessing import fetch, resize, pad
 
@@ -13,8 +14,6 @@ class WhalesSequence(Sequence):
     def __init__(self, img_dir, input_shape, x_set, y_set=None, batch_size=16):
         if y_set is not None:
             self.x, self.y = x_set, y_set
-            #self.x, self.y = shuffle(x_set, y_set, random_state=666)
-            #self.classes, self.classes_count = np.unique(self.y, return_counts=True)
             self.dataset = pd.DataFrame(data={'x': self.x, 'y': self.y, 'used': np.zeros_like(self.y)})
             self.dataset['class_count'] = self.dataset.groupby('y')['y'].transform('count')
         else:
@@ -24,6 +23,12 @@ class WhalesSequence(Sequence):
         self.input_shape = input_shape
         self.batch_size = batch_size
 
+        self.aug = ImageDataGenerator(rotation_range=15,
+                                      width_shift_range=0.1,
+                                      height_shift_range=0.1,
+                                      zoom_range=0.1,
+                                      channel_shift_range=50)
+
     def __len__(self):
         return int(np.ceil(len(self.x) / float(self.batch_size)))
 
@@ -32,15 +37,24 @@ class WhalesSequence(Sequence):
             batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
             return np.array([self.preprocess(fetch(self.img_dir, name)) for name in batch_x])
 
+        n_single, n_single_not = 0, 15  # !!!!!!!!!!!!!
         unused = self.dataset.loc[self.dataset['used'] == 0]
-        single_img = unused.loc[self.dataset['class_count'] == 1]
         single_img_not = unused.loc[self.dataset['class_count'] > 1]
-        if len(single_img_not) >= 15 and len(single_img) >= 5:
-            good = single_img_not['y'].sample(n=15)
-            bad = single_img['y'].sample(n=5)
-            include_classes = pd.concat([good, bad], axis=0).unique()
+        if len(single_img_not) >= n_single_not:
+            include_classes = unused['y'].sample(n=n_single_not).unique()
         else:
             include_classes = unused['y'].unique()
+
+        # n_single, n_single_not = 5, 15
+        # unused = self.dataset.loc[self.dataset['used'] == 0]
+        # single_img = unused.loc[self.dataset['class_count'] == 1]
+        # single_img_not = unused.loc[self.dataset['class_count'] > 1]
+        # if len(single_img_not) >= n_single_not and len(single_img) >= n_single:
+        #     good = single_img_not['y'].sample(n=n_single_not)
+        #     bad = single_img['y'].sample(n=n_single)
+        #     include_classes = pd.concat([good, bad], axis=0).unique()
+        # else:
+        #     include_classes = unused['y'].unique()
 
         sample_candidates = unused.loc[self.dataset['y'].isin(include_classes)]
         if len(sample_candidates) >= self.batch_size:
@@ -62,14 +76,13 @@ class WhalesSequence(Sequence):
             img = resize(img, (self.input_shape[1], int(self.input_shape[1] * h / w)))
         else:
             img = resize(img, (int(self.input_shape[0] * w / h), self.input_shape[0]))
+        img = self.aug.flow(np.reshape(img, (1, *img.shape)), batch_size=1, shuffle=False)[0][0]  # !!!!!!!!!!!!!!!!!!!!!!!!!!
         img = pad(img, (self.input_shape[1], self.input_shape[0]))
         return img / 255.  # pixel normalization
         #return img
 
     def on_epoch_end(self):
         if self.y is not None:
-            #self.x, self.y = shuffle(self.x, self.y, random_state=666)
-            #self.classes, self.classes_count = np.unique(self.y, return_counts=True)
             self.dataset = pd.DataFrame(data={'x': self.x, 'y': self.y, 'used': np.zeros_like(self.y)})
             self.dataset['class_count'] = self.dataset.groupby('y')['y'].transform('count')
 

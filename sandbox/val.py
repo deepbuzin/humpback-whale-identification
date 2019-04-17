@@ -13,7 +13,7 @@ labels = embeddings['Id'].values.astype('int')
 embeddings = embeddings.drop(['Id'], axis=1)
 whales = np.load('trained/raw_predictions.npy')
 
-KNN = KNeighborsClassifier(n_neighbors=5, metric='sqeuclidean')
+KNN = KNeighborsClassifier(n_neighbors=5, metric='sqeuclidean', weights='distance', algorithm='brute')
 KNN.fit(embeddings, labels)
 pred = KNN.predict(whales)
 mapping = np.load('../data/meta/idx_to_whales_mapping.npy').item()

@@ -1,10 +1,10 @@
 from core.siamese import Siamese
 
-model = Siamese('mobilenet_like', input_shape=(672, 896, 3), embedding_size=128, strategy='batch_all')
+model = Siamese('mobilenet_like', input_shape=(672, 896, 3), embedding_size=128)
 model.load_weights('trained/final_weights.h5')
 
-#model.make_embeddings('data/train', 'data/train.csv', batch_size=100)
-model.load_embeddings('trained/embeddings.pkl')
+model.make_embeddings('data/train', 'data/train.csv', batch_size=25)
+#model.load_embeddings('trained/embeddings.pkl')
 
 model.predict('data/test')
 #model.load_predictions('trained/predictions.pkl')

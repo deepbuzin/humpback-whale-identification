@@ -5,10 +5,9 @@ from __future__ import print_function
 import os
 
 import numpy as np
-import time
 import warnings
 
-from collections import deque
+from tensorflow.python.keras.utils.generic_utils import Progbar
 from keras import backend as K
 from keras.engine.training_utils import standardize_input_data
 from keras.callbacks import Callback
@@ -310,5 +309,32 @@ class TensorBoard(Callback):
                 self.samples_seen_at_last_write = self.samples_seen
 
 
+class ProgbarLossLogger(Callback):
+    def __init__(self):
+        super(ProgbarLossLogger, self).__init__()
 
+    def on_train_begin(self, logs=None):
+        self.epochs = self.params['epochs']
+
+    def on_epoch_begin(self, epoch, logs=None):
+        self.seen = 0
+        self.target = self.params['steps']
+
+        if self.epochs > 1:
+            print('Epoch %d/%d' % (epoch + 1, self.epochs))
+        self.progbar = Progbar(target=self.target, verbose=True, stateful_metrics=['loss'])
+
+    def on_batch_begin(self, batch, logs=None):
+        if self.seen < self.target:
+            self.log_values = []
+
+    def on_batch_end(self, batch, logs=None):
+        logs = logs or {}
+        num_steps = logs.get('num_steps', 1)
+        self.seen += num_steps
+
+        for k in self.params['metrics']:
+            if k in logs:
+                self.log_values.append((k, logs[k]))
+        self.progbar.update(self.seen, self.log_values)
 

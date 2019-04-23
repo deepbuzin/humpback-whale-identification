@@ -11,7 +11,7 @@ from keras.preprocessing.image import ImageDataGenerator
 from .preprocessing import fetch, resize, pad
 
 class WhalesSequence(Sequence):
-    def __init__(self, img_dir, input_shape, x_set, y_set=None, batch_size=16):
+    def __init__(self, img_dir, bboxes, input_shape, x_set, y_set=None, batch_size=16):
         if y_set is not None:
             self.x, self.y = x_set, y_set
             self.dataset = pd.DataFrame(data={'x': self.x, 'y': self.y, 'used': np.zeros_like(self.y)})
@@ -20,13 +20,14 @@ class WhalesSequence(Sequence):
             self.x, self.y = x_set, None
             
         self.img_dir = img_dir
+        self.bboxes = bboxes
         self.input_shape = input_shape
         self.batch_size = batch_size
 
         self.aug = ImageDataGenerator(rotation_range=15,
                                       width_shift_range=0.1,
                                       height_shift_range=0.1,
-                                      zoom_range=0.1,
+                                      zoom_range=0.05,
                                       channel_shift_range=50)
 
     def __len__(self):
@@ -35,7 +36,7 @@ class WhalesSequence(Sequence):
     def __getitem__(self, idx):
         if self.y is None:
             batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
-            return np.array([self.preprocess(fetch(self.img_dir, name)) for name in batch_x])
+            return np.array([self.preprocess(fetch(self.img_dir, name), name) for name in batch_x])
 
         n_single, n_single_not = 0, 15  # !!!!!!!!!!!!!
         unused = self.dataset.loc[self.dataset['used'] == 0]
@@ -67,19 +68,25 @@ class WhalesSequence(Sequence):
         self.dataset.loc[batch_indices, 'used'] = 1
         batch_x = self.dataset.iloc[batch_indices]['x'].values
         batch_y = self.dataset.iloc[batch_indices]['y'].values
-        return np.array([self.preprocess(fetch(self.img_dir, name)) for name in batch_x]), np.array(batch_y)
+        return np.array([self.preprocess(fetch(self.img_dir, name), name) for name in batch_x]), np.array(batch_y)
 
-    def preprocess(self, img):
+    def preprocess(self, img, name):
         assert len(img.shape) == 3
+
+        bbox = self.bboxes.loc[name][0]
+        img = img[bbox[0]:bbox[2], bbox[1]:bbox[3]]
+
         h, w, _ = img.shape
         if h / w <= self.input_shape[0] / self.input_shape[1]:
             img = resize(img, (self.input_shape[1], int(self.input_shape[1] * h / w)))
         else:
             img = resize(img, (int(self.input_shape[0] * w / h), self.input_shape[0]))
-        img = self.aug.flow(np.reshape(img, (1, *img.shape)), batch_size=1, shuffle=False)[0][0]  # !!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        if self.y is not None:
+            img = self.aug.flow(np.expand_dims(img, axis=0), batch_size=1, shuffle=False)[0][0]
+
         img = pad(img, (self.input_shape[1], self.input_shape[0]))
         return img / 255.  # pixel normalization
-        #return img
 
     def on_epoch_end(self):
         if self.y is not None:

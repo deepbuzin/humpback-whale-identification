@@ -8,7 +8,6 @@ import pandas as pd
 # from mpl_toolkits.mplot3d import Axes3D
 import cv2
 
-# import sys  # tmp
 import os
 import shutil
 import json
@@ -18,8 +17,8 @@ from keras.optimizers import Adam, SGD, RMSprop, Adagrad
 from keras.callbacks import ModelCheckpoint
 from utils.callbacks import TensorBoard, ProgbarLossLogger
 # from sklearn.manifold import TSNE
-# from scipy.spatial import distance
 from sklearn.neighbors import KNeighborsClassifier
+from collections import Counter
 
 from model.mobilenet import mobilenet_like
 from model.resnet import resnet_like_33, resnet_like_36
@@ -34,8 +33,6 @@ from utils.sequence import WhalesSequence
 # config = tf.ConfigProto()
 # config.gpu_options.per_process_gpu_memory_fraction = 0.5
 # set_session(tf.Session(config=config))
-
-from collections import Counter
 
 class Siamese(object):
     def __init__(self, model, strategy='batch_semi_hard', input_shape=(384, 512, 3), embedding_size=128, train_hidden_layers=True):
@@ -86,13 +83,14 @@ class Siamese(object):
 
         whales_data = self._read_csv(csv, mappings_filename=os.path.join(meta_dir, 'whales_to_idx_mapping.npy'))
         img_names, labels = whales_data[:, 0], self.new_whale_to_fictive_labels(whales_data[:, 1])
+        bboxes = pd.read_pickle(os.path.join(meta_dir, 'bboxes.pkl')).set_index('filename')
 
         # exclude classes with single img (faster start of learning)
         cntr = Counter(labels)
         mask = np.array([cntr[label] > 1 for label in labels], dtype='bool')
         img_names, labels = img_names[mask], labels[mask]
 
-        whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=img_names, y_set=labels, batch_size=batch_size)
+        whales = WhalesSequence(img_dir, bboxes=bboxes, input_shape=self.input_shape, x_set=img_names, y_set=labels, batch_size=batch_size)
         self.model.fit_generator(whales,
                                  shuffle=False,
                                  epochs=epochs,
@@ -109,51 +107,6 @@ class Siamese(object):
                                                         log_dir=os.path.join(self.cache_dir, 'tensorboard_logs'))])
         self.model.save(os.path.join(self.cache_dir, 'final_model.h5'))
         self.save_weights(os.path.join(self.cache_dir, 'final_weights.h5'))
-
-    # #old (no voting)
-    # def make_embeddings_(self, img_dir, csv, mappings_filename='data/meta/whales_to_idx_mapping.npy', batch_size=10):
-    #     whales_data = self._read_csv(csv, mappings_filename=mappings_filename)
-    #     whales_data = whales_data[np.where(whales_data[:, 1] != 0)[0]]  # no need for new_whales
-    #     whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data[:, 0], batch_size=batch_size)
-    #     pred = self.model.predict_generator(whales, verbose=1)
-    #
-    #     whales_df = pd.DataFrame(data=whales_data, columns=['Image', 'Id'])
-    #     pred_df = pd.DataFrame(data=pred)
-    #     pred_df = pd.concat([pred_df, whales_df], axis=1)
-    #     pred_df = pred_df.drop(['Image'], axis=1)
-    #     pred_df = pred_df.groupby(['Id']).mean().reset_index()
-    #     self.embeddings = pred_df.sort_values(by=['Id'])
-    #     self.save_embeddings(os.path.join(self.cache_dir, 'embeddings.pkl'))
-    #
-    # #old (no voting)
-    # def predict_(self, img_dir):
-    #     assert self.embeddings is not None
-    #     img_names = np.array(os.listdir(img_dir))
-    #     whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=img_names, batch_size=1)
-    #     whales = self.model.predict_generator(whales_seq, verbose=1)
-    #
-    #     np.save(os.path.join(self.cache_dir, 'debug', 'raw_predictions'), whales)
-    #
-    #     embeddings = self.embeddings.drop(['Id'], axis=1)
-    #
-    #     #normalize to prevent computation errors (math with small numbers is pretty)
-    #     mean_emb = np.mean(np.concatenate((embeddings, whales), axis=0), axis=0)
-    #     whales -= mean_emb
-    #     embeddings -= mean_emb
-    #
-    #     concat = np.concatenate((embeddings, whales), axis=0)
-    #     prod = np.dot(concat, np.transpose(concat))
-    #     sq_norms = np.reshape(np.diag(prod), (-1, 1))
-    #
-    #     dist = sq_norms - 2.0 * prod + np.transpose(sq_norms)
-    #     dist = dist[embeddings.shape[0]:, :embeddings.shape[0]]
-    #     dist = np.sqrt(np.maximum(dist, 0.0))
-    #
-    #     predictions = np.apply_along_axis(np.argpartition, 1, -dist, 4) + 1  # +1 to compensate new_whale
-    #     self.predictions = pd.DataFrame(data=predictions[:, :5])
-    #     self.predictions = pd.concat([pd.DataFrame(data=img_names), self.predictions], axis=1)
-    #     self.predictions.columns = ['Image'] + list(range(5))
-    #     self.save_predictions(os.path.join(self.cache_dir, 'predictions.pkl'))
 
     def make_embeddings(self, img_dir, csv, mappings_filename='data/meta/whales_to_idx_mapping.npy', batch_size=10):
         whales_data = self._read_csv(csv, mappings_filename=mappings_filename)
@@ -179,114 +132,34 @@ class Siamese(object):
         #whales = np.load('trained/raw_predictions.npy')
 
         ids = self.embeddings['Id'].values.astype('int')
-        embeddings = self.embeddings.drop(['Id'], axis=1)
+        embeddings = self.embeddings.drop(['Id'], axis=1).values
 
-        # img_names = pd.read_csv('data/train.csv')['Image'].values
-        # img_names = img_names[np.where(img_names != 'new_whale')]
-        # whales = embeddings
-
-        KNN = KNeighborsClassifier(n_neighbors=16, metric='sqeuclidean', weights='distance')
+        KNN = KNeighborsClassifier(n_neighbors=50, metric='sqeuclidean', weights='distance')
         KNN.fit(embeddings, ids)
 
         pred = KNN.predict_proba(whales)
         predictions = np.argsort(-pred, axis=1)[:, :5] + 1  # +1 to compensate 'new_whale'
+
+        # dists, neighbours = KNN.kneighbors(whales, n_neighbors=200)
+        # neighbours_labels = ids[neighbours.flat].reshape(neighbours.shape)
+        #
+        # # get 5 nearest neighbours with different labels
+        # predictions = np.zeros((len(whales), 5))
+        # for i, labels in enumerate(neighbours_labels):
+        #     j = 0
+        #     prev_labels = []
+        #     for label in labels:
+        #         if label not in prev_labels:
+        #             prev_labels.append(label)
+        #             predictions[i, j] = label
+        #             j += 1
+        #         if j == 5:
+        #             break
+
         self.predictions = pd.DataFrame(data=predictions)
         self.predictions = pd.concat([pd.DataFrame(data=img_names), self.predictions], axis=1)
         self.predictions.columns = ['Image'] + list(range(5))
         self.save_predictions(os.path.join(self.cache_dir, 'predictions.pkl'))
-
-    # #using scipy
-    # def predict_scipy(self, img_dir, csv=''):
-    #     assert self.embeddings is not None
-    #     img_names = np.array(os.listdir(img_dir)) if csv == '' else pd.read_csv(csv)['Image'].values
-    #     whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=img_names, batch_size=1)
-    #     whales = self.model.predict_generator(whales_seq, verbose=1)
-    #
-    #     np.save(os.path.join(self.cache_dir, 'debug', 'raw_predictions'), whales)
-    #     #whales = np.load('trained/raw_predictions.npy')
-    #
-    #     embeddings = self.embeddings.drop(['Id'], axis=1)
-    #     dist = distance.cdist(whales, embeddings, 'sqeuclidean')
-    #
-    #     # get array showing for each class where started it's embeddings
-    #     ids = self.embeddings['Id'].values
-    #     last_id, starts = ids[0], [0]
-    #     for ind, curr_id in enumerate(ids):
-    #         if last_id != curr_id:
-    #             starts.append(ind)
-    #             last_id = curr_id
-    #     starts.append(len(ids))
-    #     starts = np.array(starts)
-    #
-    #     # 2D array showing mean dist between val embedding and embeddings of group
-    #     mean_dist = np.empty((whales.shape[0], len(starts)), dtype=float)
-    #     mean_dist[:, 0] = sys.maxsize  # new_whale class: constant
-    #     class_offset = 1  # to compensate new_whale (class 0) - first column in mean_dist
-    #     for i in range(len(starts) - 1):
-    #         mean_dist[:, class_offset + i] = np.mean(dist[:, starts[i]:starts[i + 1]], axis=1)
-    #
-    #     predictions = np.apply_along_axis(np.argpartition, 1, -mean_dist, 4)
-    #     self.predictions = pd.DataFrame(data=predictions[:, :5])
-    #     self.predictions = pd.concat([pd.DataFrame(data=img_names), self.predictions], axis=1)
-    #     self.predictions.columns = ['Image'] + list(range(5))
-    #     self.save_predictions(os.path.join(self.cache_dir, 'predictions.pkl'))
-    #
-    # def predict_stepped(self, img_dir, csv=''):
-    #     assert self.embeddings is not None
-    #     img_names = np.array(os.listdir(img_dir)) if csv == '' else pd.read_csv(csv)['Image'].values
-    #     #whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=img_names, batch_size=1)
-    #     #whales = self.model.predict_generator(whales_seq, verbose=1)
-    #
-    #     #np.save(os.path.join(self.cache_dir, 'debug', 'raw_predictions'), whales)
-    #     whales = np.load('trained/raw_predictions.npy')
-    #
-    #     embeddings = self.embeddings.drop(['Id'], axis=1).values
-    #
-    #     #normalize to prevent computation errors (math with small numbers is pretty)
-    #     mean_emb = np.mean(np.concatenate((embeddings, whales), axis=0), axis=0)
-    #     whales -= mean_emb
-    #     embeddings -= mean_emb
-    #
-    #     # get array showing for each class where started it's embeddings
-    #     ids = self.embeddings['Id'].values
-    #     last_id, starts = ids[0], [0]
-    #     for ind, curr_id in enumerate(ids):
-    #         if last_id != curr_id:
-    #             starts.append(ind)
-    #             last_id = curr_id
-    #     starts.append(len(ids))
-    #     starts = np.array(starts)
-    #
-    #     # get 2D array showing mean dist between val embedding and embeddings of group
-    #     # using stepped calculation to prevent RAM OOM
-    #     mean_dist = np.empty((whales.shape[0], len(starts)), dtype=float)
-    #     mean_dist[:, 0] = sys.maxsize  # new_whale class: constant
-    #     splitted_starts = [starts[:len(starts) // 2 + 1], starts[len(starts) // 2:]]
-    #     class_offset = 1  # to compensate new_whale (class 0) - first column in mean_dist
-    #     embeddings_offset = 0
-    #     for starts in splitted_starts:
-    #         starts -= embeddings_offset
-    #         curr_embeddings = embeddings[starts[0]:starts[-1]]
-    #
-    #         concat = np.concatenate((curr_embeddings, whales), axis=0)
-    #         prod = np.dot(concat, np.transpose(concat))
-    #         sq_norms = np.reshape(np.diag(prod), (-1, 1))
-    #
-    #         dist = sq_norms - 2.0 * prod + np.transpose(sq_norms)
-    #         dist = dist[curr_embeddings.shape[0]:, :curr_embeddings.shape[0]]
-    #         dist = np.sqrt(np.maximum(dist, 0.0))
-    #
-    #         for i in range(len(starts) - 1):
-    #             mean_dist[:, class_offset + i] = np.mean(dist[:, starts[i]:starts[i + 1]], axis=1)
-    #
-    #         class_offset += len(starts) - 1
-    #         embeddings_offset += len(curr_embeddings)
-    #
-    #     predictions = np.apply_along_axis(np.argpartition, 1, -mean_dist, 4)
-    #     self.predictions = pd.DataFrame(data=predictions[:, :5])
-    #     self.predictions = pd.concat([pd.DataFrame(data=img_names), self.predictions], axis=1)
-    #     self.predictions.columns = ['Image'] + list(range(5))
-    #     self.save_predictions(os.path.join(self.cache_dir, 'predictions.pkl'))
 
     def save_weights(self, filename):
         self.model.save_weights(filename)

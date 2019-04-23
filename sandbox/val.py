@@ -10,12 +10,17 @@ true_labels = val["Id"].values
 
 embeddings = pd.read_pickle('trained/embeddings.pkl')
 labels = embeddings['Id'].values.astype('int')
-embeddings = embeddings.drop(['Id'], axis=1)
+embeddings = embeddings.drop(['Id'], axis=1).values
 whales = np.load('trained/raw_predictions.npy')
 
 KNN = KNeighborsClassifier(n_neighbors=5, metric='sqeuclidean', weights='distance', algorithm='brute')
 KNN.fit(embeddings, labels)
 pred = KNN.predict(whales)
+
+# dists, neighbours = KNN.kneighbors(whales, n_neighbors=5)
+# neighbours_labels = labels[neighbours.flat].reshape(neighbours.shape)
+# pred = neighbours_labels[:, 0].flatten()
+
 mapping = np.load('../data/meta/idx_to_whales_mapping.npy').item()
 pred_labels = [mapping[x][0] for x in pred]
 

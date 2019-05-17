@@ -30,8 +30,8 @@ from utils.sequence import WhalesSequence
 # import tensorflow as tf
 # from keras.backend.tensorflow_backend import set_session
 #
-# config = tf.ConfigProto()
-# config.gpu_options.per_process_gpu_memory_fraction = 0.5
+# config = tf.ConfigProto(device_count={'GPU': 0})
+# config.gpu_options.per_process_gpu_memory_fraction = 0.6
 # set_session(tf.Session(config=config))
 
 class Siamese(object):
@@ -108,10 +108,11 @@ class Siamese(object):
         self.model.save(os.path.join(self.cache_dir, 'final_model.h5'))
         self.save_weights(os.path.join(self.cache_dir, 'final_weights.h5'))
 
-    def make_embeddings(self, img_dir, csv, mappings_filename='data/meta/whales_to_idx_mapping.npy', batch_size=10):
+    def make_embeddings(self, img_dir, csv, mappings_filename='data/meta/whales_to_idx_mapping.npy', batch_size=10, meta_dir='data/meta'):
         whales_data = self._read_csv(csv, mappings_filename=mappings_filename)
         whales_data = whales_data[np.where(whales_data[:, 1] != 0)[0]]  # no need for new_whales
-        whales = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=whales_data[:, 0], batch_size=batch_size)
+        bboxes = pd.read_pickle(os.path.join(meta_dir, 'bboxes.pkl')).set_index('filename')
+        whales = WhalesSequence(img_dir, bboxes=bboxes, input_shape=self.input_shape, x_set=whales_data[:, 0], batch_size=batch_size)
         pred = self.model.predict_generator(whales, verbose=1)
 
         whales_df = pd.DataFrame(data=whales_data, columns=['Image', 'Id'])
@@ -122,14 +123,15 @@ class Siamese(object):
         self.embeddings = pred_df.sort_values(by=['Id'])
         self.save_embeddings(os.path.join(self.cache_dir, 'embeddings.pkl'))
 
-    def predict(self, img_dir, csv=''):
+    def predict(self, img_dir, csv='', meta_dir='data/meta'):
         assert self.embeddings is not None
         img_names = np.array(os.listdir(img_dir)) if csv == '' else pd.read_csv(csv)['Image'].values
-        whales_seq = WhalesSequence(img_dir, input_shape=self.input_shape, x_set=img_names, batch_size=1)
-        whales = self.model.predict_generator(whales_seq, verbose=1)
-
-        np.save(os.path.join(self.cache_dir, 'debug', 'raw_predictions'), whales)
-        #whales = np.load('trained/raw_predictions.npy')
+        # bboxes = pd.read_pickle(os.path.join(meta_dir, 'bboxes.pkl')).set_index('filename')
+        # whales_seq = WhalesSequence(img_dir, bboxes=bboxes, input_shape=self.input_shape, x_set=img_names, batch_size=1)
+        # whales = self.model.predict_generator(whales_seq, verbose=1)
+        #
+        # np.save(os.path.join(self.cache_dir, 'debug', 'raw_predictions'), whales)
+        whales = np.load('trained/raw_predictions.npy', allow_pickle=True)
 
         ids = self.embeddings['Id'].values.astype('int')
         embeddings = self.embeddings.drop(['Id'], axis=1).values
@@ -137,24 +139,31 @@ class Siamese(object):
         KNN = KNeighborsClassifier(n_neighbors=50, metric='sqeuclidean', weights='distance')
         KNN.fit(embeddings, ids)
 
-        pred = KNN.predict_proba(whales)
-        predictions = np.argsort(-pred, axis=1)[:, :5] + 1  # +1 to compensate 'new_whale'
+        # pred = KNN.predict_proba(whales)
+        # predictions = np.argsort(-pred, axis=1)[:, :5] + 1  # +1 to compensate 'new_whale'
 
-        # dists, neighbours = KNN.kneighbors(whales, n_neighbors=200)
-        # neighbours_labels = ids[neighbours.flat].reshape(neighbours.shape)
-        #
-        # # get 5 nearest neighbours with different labels
-        # predictions = np.zeros((len(whales), 5))
-        # for i, labels in enumerate(neighbours_labels):
-        #     j = 0
-        #     prev_labels = []
-        #     for label in labels:
-        #         if label not in prev_labels:
-        #             prev_labels.append(label)
-        #             predictions[i, j] = label
-        #             j += 1
-        #         if j == 5:
-        #             break
+        dists, neighbours = KNN.kneighbors(whales, n_neighbors=200)
+        neighbours_labels = ids[neighbours.flat].reshape(neighbours.shape)
+
+        # get 5 nearest neighbours with different labels
+        predictions = np.zeros((len(whales), 5))
+        for i, labels in enumerate(neighbours_labels):
+            j = 0
+            prev_labels = []
+            for label in labels:
+                if label not in prev_labels:
+                    prev_labels.append(label)
+                    predictions[i, j] = label
+                    j += 1
+                if j == 5:
+                    break
+
+        # new whales nearest neighbours distance cutoff
+        #threshold = 0.0452 # ~ 0.276
+        threshold = 0.015
+        new_whale_inds = np.where(dists[:, 0] >= threshold)[0]
+        predictions[new_whale_inds, 1:] = predictions[new_whale_inds, :-1]
+        predictions[new_whale_inds, 0] = 0
 
         self.predictions = pd.DataFrame(data=predictions)
         self.predictions = pd.concat([pd.DataFrame(data=img_names), self.predictions], axis=1)
@@ -188,7 +197,7 @@ class Siamese(object):
     def _read_csv(self, csv, write_mappings=False, mappings_filename=None):
         csv_data = pd.read_csv(csv)
         if mappings_filename is not None:
-            mapping = np.load(mappings_filename).item()
+            mapping = np.load(mappings_filename, allow_pickle=True).item()
         else:
             mapping = {}
             reverse_mapping = {}
@@ -218,7 +227,7 @@ class Siamese(object):
     #     plt.show()
 
     def make_kaggle_csv(self, mapping_file):
-        mapping = np.load(mapping_file).item()
+        mapping = np.load(mapping_file, allow_pickle=True).item()
         for k in mapping:
             mapping[k] = mapping[k][0]
         predictions = self.predictions.replace({0: mapping, 1: mapping, 2: mapping, 3: mapping, 4: mapping})
@@ -226,7 +235,7 @@ class Siamese(object):
         predictions.to_csv(os.path.join(self.cache_dir, 'submission.csv'), index=False, columns=['Image', 'Id'])
 
     def make_csv(self, mapping_file):
-        mapping = np.load(mapping_file).item()
+        mapping = np.load(mapping_file, allow_pickle=True).item()
         for k in mapping:
             mapping[k] = mapping[k][0]
         predictions = self.predictions.replace({0: mapping, 1: mapping, 2: mapping, 3: mapping, 4: mapping})
